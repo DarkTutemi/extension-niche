@@ -54,6 +54,52 @@ function setupSecretKey() {
 }
 
 /**
+ * Hàm kiểm tra kết nối và ghi thử trực tiếp từ Apps Script Editor
+ * Bấm chọn hàm này trên thanh công cụ và bấm 'Chạy' (Run) để kiểm tra & cấp quyền
+ */
+function testDirectWrite() {
+  setupSecretKey();
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss && typeof SPREADSHEET_ID !== 'undefined' && SPREADSHEET_ID.trim()) {
+    try {
+      ss = SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+    } catch (e) {
+      Logger.log('❌ Lỗi mở Sheet: ' + e.message);
+      throw e;
+    }
+  }
+  if (!ss) {
+    throw new Error('Chưa tìm thấy Sheet! Nếu dùng script độc lập, vui lòng điền SPREADSHEET_ID ở dòng 26.');
+  }
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
+  if (sheet.getLastRow() === 0) {
+    initSheetHeader(sheet);
+  }
+  const testRow = [
+    sheet.getLastRow(),
+    'Pet',
+    'dog calming bed',
+    '104376421493890',
+    'Muddy Mat (Test Kết Nối)',
+    'https://www.facebook.com/ads/library/?id=104376421493890',
+    'https://muddymats.com',
+    22,
+    1,
+    0.957,
+    96,
+    'Shopify JSON',
+    new Date(),
+    'PASS'
+  ];
+  sheet.appendRow(testRow);
+  sheet.getRange(sheet.getLastRow(), 10).setNumberFormat('0.0%');
+  Logger.log('✅ THÀNH CÔNG: Đã ghi thử 1 dòng vào Sheet: ' + ss.getName());
+}
+
+/**
  * Xử lý yêu cầu POST gửi từ Chrome Extension
  */
 function doPost(e) {
