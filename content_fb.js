@@ -406,7 +406,7 @@ async function extractFirstAdDetails() {
 //  META GRAPHQL API CLIENT (Siêu tốc, chính xác 100%, không cần cuộn DOM)
 // ══════════════════════════════════════════════════════════════════════
 
-const FB_GRAPHQL_DOC_ID = '26617181747964058';
+const FB_GRAPHQL_DOC_ID = '24922295957467452';
 
 function extractFbAuthTokens() {
   let fb_dtsg = null, lsd = null, userId = null;
@@ -470,7 +470,7 @@ async function callMetaGraphQL(variables) {
     jazoest: '25652',
     lsd: auth.lsd || 'FG8fc5u7N54QUhSLUuecSr',
     fb_api_caller_class: 'RelayModern',
-    fb_api_req_friendly_name: 'AdLibraryMobileFocusedStateProviderRefetchQuery',
+    fb_api_req_friendly_name: 'AdLibrarySearchPaginationQuery',
     server_timestamps: 'true',
     variables: JSON.stringify(variables),
     doc_id: FB_GRAPHQL_DOC_ID
@@ -480,7 +480,7 @@ async function callMetaGraphQL(variables) {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
-      'x-fb-friendly-name': 'AdLibraryMobileFocusedStateProviderRefetchQuery',
+      'x-fb-friendly-name': 'AdLibrarySearchPaginationQuery',
       'x-fb-lsd': auth.lsd || 'FG8fc5u7N54QUhSLUuecSr'
     },
     body: bodyParams.toString()
@@ -521,34 +521,25 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
   const targetCountry = country === 'ALL' ? 'US' : country;
 
   const buildVariables = (q, sType) => ({
-    activeStatus: 'ACTIVE',
+    activeStatus: 'active',
     adType: 'ALL',
-    audienceTimeframe: 'LAST_7_DAYS',
     bylines: [],
-    collationToken: 'faa17582-e352-4445-ace8-508282f9e61a',
+    collationToken: null,
     contentLanguages: [],
-    countries: country === 'ALL' ? [] : [country],
-    country: targetCountry,
+    countries: targetCountry === 'ALL' ? ['US'] : [targetCountry],
     cursor: null,
-    deeplinkAdID: null,
-    excludedIDs: [],
-    fetchPageInfo: false,
-    fetchSharedDisclaimers: false,
+    excludedIDs: null,
     first: Math.min(30, maxPages),
-    hasDeeplinkAdID: false,
-    isAboutTab: false,
-    isAudienceTab: false,
-    isLandingPage: false,
     isTargetedCountry: false,
     location: null,
-    mediaType: config.mediaType || 'ALL',
+    mediaType: (config.mediaType || 'video').toLowerCase(),
     multiCountryFilterMode: null,
     pageIDs: [],
-    potentialReachInput: [],
-    publisherPlatforms: config.publisherPlatform && config.publisherPlatform !== 'ALL' ? [config.publisherPlatform] : [],
+    potentialReachInput: null,
+    publisherPlatforms: config.publisherPlatform && config.publisherPlatform !== 'ALL' ? [config.publisherPlatform.toLowerCase()] : ['facebook'],
     queryString: q,
-    regions: [],
-    searchType: sType,
+    regions: null,
+    searchType: (sType || 'keyword_exact_phrase').toLowerCase(),
     sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
     sortData: {
       direction: 'DESCENDING',
@@ -556,7 +547,7 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
     },
     source: null,
     startDate: config.startDateMin ? { min: config.startDateMin, max: null } : null,
-    v: '0c407c',
+    v: 'e3d3df',
     viewAllPageID: '0'
   });
 
@@ -600,39 +591,32 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
 }
 
 async function readPageAdCountViaGraphQL(pageId, status = 'active') {
+  const normStatus = (status || 'active').toLowerCase();
   const variables = {
-    activeStatus: status.toUpperCase(),
+    activeStatus: normStatus,
     adType: 'ALL',
-    audienceTimeframe: 'LAST_7_DAYS',
     bylines: [],
-    collationToken: '937e0430-4096-4448-8304-a8e6a1c28539',
+    collationToken: null,
     contentLanguages: [],
-    countries: [],
+    countries: ['US'],
     cursor: null,
-    deeplinkAdID: null,
-    excludedIDs: [],
-    fetchPageInfo: false,
-    fetchSharedDisclaimers: false,
+    excludedIDs: null,
     first: 30,
-    hasDeeplinkAdID: false,
-    isAboutTab: false,
-    isAudienceTab: false,
-    isLandingPage: false,
     isTargetedCountry: false,
     location: null,
-    mediaType: 'ALL',
+    mediaType: 'all',
     multiCountryFilterMode: null,
     pageIDs: [String(pageId)],
-    potentialReachInput: [],
+    potentialReachInput: null,
     publisherPlatforms: [],
     queryString: '',
-    regions: [],
-    searchType: 'PAGE',
+    regions: null,
+    searchType: 'page',
     sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
     sortData: { direction: 'DESCENDING', mode: 'SORT_BY_TOTAL_IMPRESSIONS' },
     source: null,
-    startDate: null,
-    v: '0c407c',
+    startDate: { max: null, min: null },
+    v: 'e3d3df',
     viewAllPageID: String(pageId)
   };
 
@@ -644,9 +628,10 @@ async function readPageAdCountViaGraphQL(pageId, status = 'active') {
     return { count: null, status: 'UNKNOWN' };
   }
 
+  const hasNext = conn?.page_info?.has_next_page;
   return {
     count,
-    rawText: `${count} ads (GraphQL)`,
+    rawText: `${count}${hasNext ? '+' : ''} ads (GraphQL)`,
     status: count === 0 ? 'ZERO' : 'OK'
   };
 }
