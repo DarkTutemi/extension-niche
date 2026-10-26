@@ -23,7 +23,7 @@ const SHEET_NAME = 'FB_Ads_Research';
 // - Nếu tạo Apps Script từ trong Google Sheet (Tiện ích mở rộng -> Apps Script): ĐỂ TRỐNG ''.
 // - Nếu tạo Apps Script độc lập (Standalone) từ script.google.com: Dán ID của Google Sheet vào đây.
 //   (ID là chuỗi ký tự giữa /d/ và /edit trong link Google Sheet)
-const SPREADSHEET_ID = '';
+const SPREADSHEET_ID = '186rhrVieyBJztWzKiDTwkf6Q-H3Zh8yWsfHgkfqQ28c';
 
 // ── CỘT DỮ LIỆU CHUẨN HÓA ──────────────────────────────────────────
 const HEADERS = [

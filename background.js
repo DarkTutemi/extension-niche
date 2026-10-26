@@ -42,7 +42,7 @@ const DEFAULT_STATE = {
     delayMin: 2,
     delayMax: 5,
     tabType: 'background',
-    sheetsUrl: 'https://script.google.com/macros/s/AKfycbx_Ti0IcauK97DYrBDy3CVyIoU9GyesRjytl6W38kDRCMDTEhEtKQZKNEs1ar7q-x_Z/exec',
+    sheetsUrl: 'https://script.google.com/macros/s/AKfycbxkK_w6gHRswlP8xhxZB8khEB32s81QmbUZF9LeJcnDKYZtaauW8Oh88QGbYpnmi-pn/exec',
     secretKey: 'my_super_secret_key_2026',
     mediaType: 'ALL',
     publisherPlatform: 'ALL',
