@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "FB Ads Product Research",
+  "version": "1.0.0",
+  "description": "Nghiên cứu sản phẩm từ Facebook Ads Library – Sàng lọc ứng viên theo tỷ lệ active/inactive và số sản phẩm website",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://l.facebook.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "FB Ads Product Research"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/ads/library/*"],
+      "js": ["selectors.js", "content_fb.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

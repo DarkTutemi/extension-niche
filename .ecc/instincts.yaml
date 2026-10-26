@@ -1,0 +1,88 @@
+# ECC Continuous Learning - Project Instincts Ledger
+# Project: fb-ads-research-extension
+# Harness: ECC v2.1 Instinct Architecture
+# Loop: plan -> test -> implement -> review -> verify -> remember -> improve
+
+project_id: "fb-ads-research-ext"
+project_name: "Facebook Ads Library Product Research Extension"
+version: "1.0.0"
+updated_at: "2026-10-26T19:07:00Z"
+
+instincts:
+  - id: fb-ad-count-heading-selector
+    domain: "facebook-dom"
+    scope: project
+    confidence: 0.95
+    trigger: "when extracting ad count from Facebook Ads Library search results"
+    action: "Look for div[role='heading'][aria-level='3'] containing numeric patterns before falling back to full text tree walking. Avoid obfuscated CSS class names like .x193iq5w as Facebook hashes them across deployments."
+    evidence:
+      - "Observed in live session 2026-10-26: Heading was div[role='heading'][aria-level='3'] with text '~31.000 kết quả' and '~86 results'."
+      - "Regex must match [~≈] prefix, handle thousands separators (. or ,), and accept both 'results' and 'kết quả'."
+
+  - id: fb-cta-url-cleaner
+    domain: "url-sanitization"
+    scope: project
+    confidence: 0.92
+    trigger: "when extracting outbound destination URL from Facebook ad card CTA"
+    action: "Extract param 'u' from 'https://l.facebook.com/l.php?u=...', decodeURIComponent, and strip tracking query parameters (fbclid, utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid, ttclid)."
+    evidence:
+      - "Facebook wraps external clicks through l.facebook.com shim to track outbound traffic."
+      - "Raw URLs retain tracking parameters that break catalog deduplication and sitemap querying if not cleaned."
+
+  - id: gas-cors-text-plain-bypass
+    domain: "api-integration"
+    scope: project
+    confidence: 0.98
+    trigger: "when posting JSON payloads to Google Apps Script Web App endpoints"
+    action: "Use fetch(..., { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(...) }) instead of application/json. In Apps Script, parse via JSON.parse(e.postData.contents)."
+    evidence:
+      - "Google Apps Script returns a CORS error on OPTIONS preflight if application/json is sent from a browser extension without server preflight handling. text/plain is treated as a simple request and avoids preflight."
+
+  - id: shopify-product-count-pagination
+    domain: "ecommerce-crawler"
+    scope: project
+    confidence: 0.90
+    trigger: "when counting product catalog on Shopify stores"
+    action: "First probe /sitemap_products_1.xml (counts <url> tags fast in one fetch). If 404 or blocked, probe /products.json?limit=250. Check if array length is 250, paginate if needed, or check collections/all pagination."
+    evidence:
+      - "Over 85% of active dropship/eCom stores host /sitemap_products_1.xml."
+      - "Shopify caps /products.json at 250 items per request, returning empty array on subsequent pages."
+
+  - id: mv3-service-worker-alarm-keepalive
+    domain: "chrome-extension-architecture"
+    scope: project
+    confidence: 0.95
+    trigger: "when long-running crawl queues run in Chrome MV3 Service Worker"
+    action: "Never rely on setTimeout/setInterval alone, as Chrome shuts down idle service workers after 30 seconds. Register chrome.alarms with periodInMinutes (minimum 1 min in production, or ping background port) and persist state after EVERY processed Page into chrome.storage.local."
+    evidence:
+      - "MV3 service workers can be terminated mid-crawl when user switches tabs or stays idle."
+      - "Resume capability requires saving queueIndex, currentKeyword, and pendingSheetWrites."
+
+  - id: fb-zero-ad-result-detection
+    domain: "facebook-dom"
+    scope: project
+    confidence: 0.98
+    trigger: "when detecting zero active or inactive ads on a Facebook Page Ads Library filter"
+    action: "Check for localized empty state headings like 'Không có quảng cáo nào khớp với tiêu chí tìm kiếm' (VI) and 'No ads match your search criteria' / 'There are no ads to show' (EN), as Facebook renders an aria-level='2' heading instead of '~0 kết quả'."
+    evidence:
+      - "Observed in live session 2026-10-26: When view_all_page_id had 0 ads, Facebook showed div[role='heading'][aria-level='2'] with text 'Không có quảng cáo nào khớp với tiêu chí tìm kiếm của bạn'."
+
+  - id: fb-ad-card-active-label
+    domain: "facebook-dom"
+    scope: project
+    confidence: 0.96
+    trigger: "when parsing ad status directly from Facebook Ads Library cards"
+    action: "Look for 'Hoạt động' (VI) or 'Active' (EN) in the card metadata header adjacent to 'ID thư viện:'. Note that Vietnamese DOM says 'Hoạt động', NOT 'Đang hoạt động'."
+    evidence:
+      - "Observed in live session 2026-10-26: Card text rendered as 'Hoạt động\\nID thư viện: 1753299559222237\\nNgày bắt đầu chạy: 4 Tháng 9, 2026'."
+
+  - id: meta-graphql-ad-library-crawler
+    domain: "api-integration"
+    scope: project
+    confidence: 0.99
+    trigger: "when searching Facebook Ads Library by keyword or querying page ad counts"
+    action: "Call https://www.facebook.com/api/graphql/ using AdLibrarySearchPaginationQuery (doc_id: 24922295957467452). Extract fb_dtsg and lsd from page DTSGInitialData or script tags. Bypasses DOM virtual scroll, unwraps clean link_url, page_id, and is_active directly in JSON in under 400ms."
+    evidence:
+      - "Tested in live session 2026-10-26: Fetched 20 ads across 15 Fanpages in under 40s with 100% precision, zero DOM selector failures, and directly retrieved clean Shopify product URLs."
+
+

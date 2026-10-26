@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FB Ads Product Research — Side Panel</title>
+<style>
+/* ── Reset & Base ──────────────────────────────────────────────── */
+* { margin:0; padding:0; box-sizing:border-box; }
+html { font-size:13px; }
+body {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: #0f1117;
+  color: #e2e8f0;
+}
+
+/* ── Typography ────────────────────────────────────────────────── */
+h1 { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+h2 { font-size: .92rem; font-weight: 600; margin-bottom: 6px; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }
+label { font-size: .85rem; color: #94a3b8; display: block; margin-bottom: 3px; }
+
+/* ── Layout helpers ────────────────────────────────────────────── */
+.section { background: #1e2130; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; border: 1px solid #232738; }
+.row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.row > * { flex: 1; }
+.col { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Form elements ─────────────────────────────────────────────── */
+select, input[type=text], input[type=number], input[type=password], input[type=date] {
+  width: 100%; background: #2a2d3e; border: 1px solid #3b3f54; border-radius: 5px;
+  color: #e2e8f0; padding: 6px 8px; font-size: .85rem; outline: none; transition: border .2s; color-scheme: dark;
+}
+select:focus, input:focus, textarea:focus { border-color: #6366f1; }
+input[type=number] { -moz-appearance: textfield; }
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; }
+textarea {
+  width: 100%; background: #2a2d3e; border: 1px solid #3b3f54; border-radius: 5px;
+  color: #e2e8f0; padding: 6px 8px; font-size: .85rem; outline: none; resize: vertical;
+  font-family: inherit; line-height: 1.4;
+}
+
+/* ── Mode Switcher Tabs ────────────────────────────────────────── */
+.mode-tabs { display: flex; gap: 4px; margin-bottom: 8px; background: #151824; padding: 3px; border-radius: 6px; }
+.mode-tab {
+  flex: 1; background: transparent; border: none; color: #94a3b8; padding: 5px 0;
+  font-size: .78rem; font-weight: 600; border-radius: 4px; cursor: pointer; transition: all .15s; text-align: center;
+}
+.mode-tab:hover { color: #e2e8f0; }
+.mode-tab.active { background: #4f46e5; color: #fff; }
+.chip-tools { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.link-btn { background: none; border: none; color: #818cf8; font-size: .75rem; cursor: pointer; padding: 0 2px; text-decoration: underline; }
+.link-btn:hover { color: #a5b4fc; }
+
+/* ── Main Top Nav Tabs ─────────────────────────────────────────── */
+.nav-tabs { display: flex; gap: 4px; margin-bottom: 8px; background: #151824; padding: 3px; border-radius: 8px; border: 1px solid #232736; }
+.nav-tab {
+  flex: 1; background: transparent; border: none; color: #94a3b8; padding: 7px 0;
+  font-size: .82rem; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.nav-tab:hover { color: #e2e8f0; background: #1e2233; }
+.nav-tab.active { background: #4f46e5; color: #fff; box-shadow: 0 2px 6px rgba(79,70,229,.35); }
+.nav-badge { background: #2a2d3e; color: #cbd5e1; font-size: .7rem; padding: 1px 6px; border-radius: 10px; font-weight: 700; }
+.nav-tab.active .nav-badge { background: #312e81; color: #e0e7ff; }
+
+/* ── Keyword chips ─────────────────────────────────────────────── */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; max-height: 140px; overflow-y: auto; margin-bottom: 6px; padding: 2px; }
+.chip {
+  background: #2a2d3e; border: 1px solid #3b3f54; border-radius: 14px; padding: 3px 10px;
+  font-size: .78rem; cursor: pointer; transition: all .15s; user-select: none; white-space: nowrap;
+}
+.chip:hover { border-color: #6366f1; background: #32355a; }
+.chip.selected { background: #4f46e5; border-color: #6366f1; color: #fff; }
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn-group { display: flex; gap: 6px; margin-bottom: 8px; }
+.btn {
+  flex: 1; padding: 8px 0; border: none; border-radius: 6px; font-size: .85rem; font-weight: 600;
+  cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-start { background: #22c55e; color: #000; } .btn-start:hover:not(:disabled) { background: #16a34a; }
+.btn-stop { background: #ef4444; color: #fff; } .btn-stop:hover:not(:disabled) { background: #dc2626; }
+.btn-resume { background: #3b82f6; color: #fff; } .btn-resume:hover:not(:disabled) { background: #2563eb; }
+.btn-clear { background: #374151; color: #9ca3af; font-size: .75rem; padding: 4px 8px; flex: 0 0 auto; }
+.btn-clear:hover { background: #4b5563; color: #e2e8f0; }
+
+/* ── Collapsible config ────────────────────────────────────────── */
+.config-toggle { cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: .85rem; color: #94a3b8; margin-bottom: 6px; }
+.config-toggle:hover { color: #e2e8f0; }
+.config-toggle .arrow { transition: transform .2s; font-size: .7rem; }
+.config-toggle .arrow.open { transform: rotate(90deg); }
+.config-body { display: none; padding-top: 4px; }
+.config-body.show { display: block; }
+
+/* ── Progress ──────────────────────────────────────────────────── */
+.progress { font-size: .82rem; line-height: 1.6; }
+.progress .label { color: #64748b; }
+.progress .value { color: #e2e8f0; font-weight: 600; }
+.status-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .72rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+}
+.status-IDLE { background: #374151; color: #9ca3b8; }
+.status-RUNNING { background: #1e3a5f; color: #60a5fa; }
+.status-PAUSED { background: #422006; color: #fbbf24; }
+.status-STOPPED { background: #450a0a; color: #fca5a5; }
+.status-COMPLETED { background: #052e16; color: #4ade80; }
+
+/* ── Log panel ─────────────────────────────────────────────────── */
+.log-panel { max-height: 200px; overflow-y: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: .72rem; line-height: 1.5; }
+.log-entry { padding: 3px 0; border-bottom: 1px solid #1a1d2a; display: flex; gap: 6px; }
+.log-time { color: #64748b; flex-shrink: 0; min-width: 60px; }
+.log-badge { flex-shrink: 0; min-width: 52px; text-align: center; border-radius: 3px; padding: 0 4px; font-weight: 700; font-size: .68rem; }
+.log-msg { color: #cbd5e1; word-break: break-word; }
+
+.log-RUNNING .log-badge { background: #1e3a5f; color: #60a5fa; }
+.log-PASS .log-badge    { background: #052e16; color: #4ade80; }
+.log-SKIP .log-badge    { background: #422006; color: #fbbf24; }
+.log-ERROR .log-badge   { background: #450a0a; color: #fca5a5; }
+.log-SAVED .log-badge   { background: #2e1065; color: #c084fc; }
+.log-INFO .log-badge    { background: #1e293b; color: #94a3b8; }
+.log-WARN .log-badge    { background: #422006; color: #fb923c; }
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f1117; }
+::-webkit-scrollbar-thumb { background: #3b3f54; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4f5370; }
+
+/* ── Footer note ───────────────────────────────────────────────── */
+.note { font-size: .7rem; color: #475569; text-align: center; margin-top: 6px; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<!-- ═══════ HEADER ═══════ -->
+<div class="section" style="padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+  <h1>🔍 FB Ads Product Research</h1>
+  <span class="status-badge status-IDLE" id="sidepanelStatusBadge" style="font-size:0.68rem">SIDE PANEL</span>
+</div>
+
+<!-- ═══════ TOP MAIN NAVIGATION TABS ═══════ -->
+<div class="nav-tabs">
+  <button type="button" class="nav-tab active" id="tabNavResearch">🎯 Thiết lập & Quét</button>
+  <button type="button" class="nav-tab" id="tabNavLogs">📋 Logfile <span id="logCountBadge" class="nav-badge">0</span></button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!--  VIEW 1: THIẾT LẬP & QUÉT (RESEARCH & FILTERS)                      -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="viewResearch">
+
+<!-- ═══════ NICHE & KEYWORDS ═══════ -->
+<div class="section">
+  <h2>Ngách & Keyword</h2>
+
+  <!-- Mode Switcher -->
+  <div class="mode-tabs">
+    <button type="button" class="mode-tab active" id="tabInote" data-mode="inote">🌐 Link iNote</button>
+    <button type="button" class="mode-tab" id="tabManual" data-mode="manual">✍️ Nhập tay từng ngách</button>
+    <button type="button" class="mode-tab" id="tabBuiltin" data-mode="builtin">⚡ Có sẵn (200 SP)</button>
+  </div>
+
+  <!-- PANEL 1: LINK INOTE -->
+  <div id="panelInote">
+    <div class="row" style="margin-bottom:4px">
+      <input type="text" id="inoteUrl" value="https://inote.net/2Z7UdHArWz" placeholder="Dán link iNote (https://inote.net/...)">
+      <button type="button" class="btn btn-sm" id="btnFetchInote" style="flex:0 0 95px;background:#4f46e5;color:#fff;border-radius:5px;font-size:.78rem">📥 Tải iNote</button>
+    </div>
+    <div id="inoteStatus" style="font-size:.72rem;color:#818cf8;margin-bottom:6px">✅ Đã nạp 4 ngách (200 từ khóa) từ iNote</div>
+  </div>
+
+  <!-- PANEL 2: NHẬP TAY TỪNG NGÁCH -->
+  <div id="panelManual" style="display:none;margin-bottom:6px">
+    <div class="col" style="margin-bottom:6px">
+      <label for="manualNicheName">Tên ngách nhập tay</label>
+      <input type="text" id="manualNicheName" placeholder="ví dụ: Fitness, Outdoor, Kitchen...">
+    </div>
+    <div class="col">
+      <label for="manualKeywordsText">Danh sách từ khóa (mỗi từ 1 dòng hoặc cách bằng dấu phẩy)</label>
+      <textarea id="manualKeywordsText" rows="3" placeholder="yoga mat&#10;resistance bands set&#10;foam roller"></textarea>
+    </div>
+  </div>
+
+  <!-- PANEL CHỌN NGÁCH & QUỐC GIA (Dành cho iNote & Built-in) -->
+  <div id="panelNicheSelect" class="row">
+    <div class="col">
+      <label for="niche">Ngách sản phẩm</label>
+      <select id="niche">
+        <option value="Beauty">💄 Beauty (50 từ khóa)</option>
+        <option value="Car">🚗 Car (50 từ khóa)</option>
+        <option value="Pet">🐾 Pet (50 từ khóa)</option>
+        <option value="Home">🏠 Home (50 từ khóa)</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="country">Quốc gia</label>
+      <select id="country">
+        <option value="ALL">ALL (Tất cả)</option>
+        <option value="US" selected>US – Mỹ</option>
+        <option value="GB">GB – Anh</option>
+        <option value="CA">CA – Canada</option>
+        <option value="AU">AU – Úc</option>
+        <option value="DE">DE – Đức</option>
+        <option value="FR">FR – Pháp</option>
+        <option value="VN">VN – Việt Nam</option>
+        <option value="TH">TH – Thái Lan</option>
+        <option value="PH">PH – Philippines</option>
+        <option value="ID">ID – Indonesia</option>
+        <option value="MY">MY – Malaysia</option>
+        <option value="SG">SG – Singapore</option>
+        <option value="JP">JP – Nhật Bản</option>
+        <option value="KR">KR – Hàn Quốc</option>
+        <option value="IN">IN – Ấn Độ</option>
+        <option value="BR">BR – Brazil</option>
+        <option value="MX">MX – Mexico</option>
+        <option value="IT">IT – Ý</option>
+        <option value="ES">ES – Tây Ban Nha</option>
+        <option value="NL">NL – Hà Lan</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="chipsSection">
+    <div class="chip-tools">
+      <label style="margin:0">Keywords ngách <span id="chipCount" style="color:#6366f1">(0 đã chọn)</span></label>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="link-btn" id="btnSelectAllChips">Chọn tất cả</button>
+        <button type="button" class="link-btn" id="btnDeselectAllChips">Bỏ chọn</button>
+      </div>
+    </div>
+    <div class="chips" id="keywordChips">
+      <span style="color:#475569;font-size:.78rem">← Chọn ngách để hiện keyword</span>
+    </div>
+
+    <label for="customKeyword">Keyword tùy chỉnh thêm (phân tách bằng dấu phẩy)</label>
+    <input type="text" id="customKeyword" placeholder="ví dụ: car charger, dog bed orthopedic">
+  </div>
+</div>
+
+<!-- ═══════ FB ADS FILTERS (GRAPHQL ENGINE) ═══════ -->
+<div class="section">
+  <h2>🎯 Bộ lọc Ads Library chuyên sâu</h2>
+  
+  <div class="row">
+    <div class="col">
+      <label for="mediaType">Loại Media</label>
+      <select id="mediaType">
+        <option value="ALL">Tất cả định dạng</option>
+        <option value="VIDEO">Chỉ Video (TikTok/Reels Ads)</option>
+        <option value="IMAGE">Chỉ Hình ảnh (Image)</option>
+        <option value="MEME">Meme</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="publisherPlatform">Nền tảng xuất bản</label>
+      <select id="publisherPlatform">
+        <option value="ALL">Tất cả nền tảng</option>
+        <option value="FACEBOOK">Facebook Feed / Video</option>
+        <option value="INSTAGRAM">Instagram / Reels</option>
+        <option value="AUDIENCE_NETWORK">Audience Network</option>
+        <option value="MESSENGER">Messenger</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <label for="searchType">Kiểu tìm kiếm</label>
+      <select id="searchType">
+        <option value="KEYWORD_UNORDERED">Từ khóa mở rộng (Unordered)</option>
+        <option value="KEYWORD_EXACT_PHRASE">Cụm từ chính xác ("Exact")</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="sortMode">Sắp xếp theo</label>
+      <select id="sortMode">
+        <option value="SORT_BY_TOTAL_IMPRESSIONS">Lượt hiển thị cao nhất (Impressions)</option>
+        <option value="SORT_BY_START_DATE">Ngày bắt đầu mới nhất (Recent)</option>
+        <option value="SORT_BY_RELEVANCY_MONTHLY_GROUPED">Mức độ liên quan (Relevancy)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <label for="minMonthsAgo">Chạy từ (Min Date)</label>
+      <select id="minMonthsAgo">
+        <option value="0">Tất cả thời gian</option>
+        <option value="1">1 tháng gần nhất</option>
+        <option value="2">2 tháng gần nhất</option>
+        <option value="3" selected>3 tháng gần nhất (Khuyên dùng)</option>
+        <option value="4">4 tháng gần nhất</option>
+        <option value="5">5 tháng gần nhất</option>
+        <option value="6">6 tháng gần nhất (Nửa năm)</option>
+        <option value="7">7 tháng gần nhất</option>
+        <option value="8">8 tháng gần nhất</option>
+        <option value="9">9 tháng gần nhất</option>
+        <option value="10">10 tháng gần nhất</option>
+        <option value="11">11 tháng gần nhất</option>
+        <option value="12">12 tháng gần nhất (1 năm)</option>
+        <option value="custom">📅 Tự chọn ngày cụ thể...</option>
+      </select>
+      <div id="minDateDisplay" style="font-size:.75rem;color:#818cf8;margin-top:2px;font-weight:600">
+        📅 Chạy từ: 26/07/2026
+      </div>
+      <input type="date" id="startDateMin" style="display:none;margin-top:4px">
+    </div>
+    <div class="col">
+      <label for="crawlerEngine">Cơ chế thu thập</label>
+      <select id="crawlerEngine">
+        <option value="GRAPHQL">⚡ Meta GraphQL API (3s, Chuẩn 100%)</option>
+        <option value="DOM">🌐 DOM Virtual Scroll (Truyền thống)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ CONFIG ═══════ -->
+<div class="section">
+  <div class="config-toggle" id="configToggle">
+    <span class="arrow" id="configArrow">▶</span>
+    <h2 style="margin:0">⚙️ Cấu hình nâng cao</h2>
+  </div>
+  <div class="config-body" id="configBody">
+    <div class="row">
+      <div class="col">
+        <label for="activeThreshold">Ngưỡng active (%)</label>
+        <input type="number" id="activeThreshold" value="70" min="1" max="100">
+      </div>
+      <div class="col">
+        <label for="minProducts">Sản phẩm tối thiểu</label>
+        <select id="minProducts">
+          <option value="15" selected>15</option>
+          <option value="20">20</option>
+          <option value="10">10</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col">
+        <label for="maxPages">Tối đa Page/keyword</label>
+        <input type="number" id="maxPages" value="30" min="1" max="200">
+      </div>
+      <div class="col">
+        <label for="maxScrolls">Tối đa lần cuộn</label>
+        <input type="number" id="maxScrolls" value="15" min="1" max="100">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col">
+        <label for="delayMin">Delay tối thiểu (s)</label>
+        <input type="number" id="delayMin" value="2" min="1" max="30">
+      </div>
+      <div class="col">
+        <label for="delayMax">Delay tối đa (s)</label>
+        <input type="number" id="delayMax" value="5" min="1" max="60">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col">
+        <label for="tabType">Kiểu mở tab</label>
+        <select id="tabType">
+          <option value="background">Nền (background)</option>
+          <option value="foreground">Nổi (foreground)</option>
+        </select>
+      </div>
+    </div>
+    <div class="col" style="margin-bottom:6px">
+      <label for="sheetsUrl">Google Apps Script URL</label>
+      <input type="text" id="sheetsUrl" value="https://script.google.com/macros/s/AKfycbx_Ti0IcauK97DYrBDy3CVyIoU9GyesRjytl6W38kDRCMDTEhEtKQZKNEs1ar7q-x_Z/exec" placeholder="https://script.google.com/macros/s/...">
+    </div>
+    <div class="col">
+      <label for="secretKey">Secret Key (webhook)</label>
+      <input type="password" id="secretKey" value="my_super_secret_key_2026" placeholder="Nhập secret key bảo mật">
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ ACTIONS ═══════ -->
+<div class="btn-group">
+  <button class="btn btn-start" id="btnStart">▶ Start</button>
+  <button class="btn btn-stop" id="btnStop" disabled>⏹ Stop</button>
+  <button class="btn btn-resume" id="btnResume" disabled>↻ Resume</button>
+</div>
+
+<!-- ═══════ PROGRESS ═══════ -->
+<div class="section" id="progressSection" style="display:none">
+  <h2>📊 Tiến độ</h2>
+  <div class="progress">
+    <div><span class="label">Trạng thái:</span> <span class="status-badge status-IDLE" id="statusBadge">IDLE</span></div>
+    <div><span class="label">Keyword:</span> <span class="value" id="currentKeyword">—</span></div>
+    <div><span class="label">Page:</span> <span class="value" id="currentPage">—</span></div>
+    <div><span class="label">Tiến độ:</span> <span class="value" id="progressText">0/0</span></div>
+    <div><span class="label">Đã PASS:</span> <span class="value" style="color:#4ade80" id="passCount">0</span>
+         <span class="label" style="margin-left:8px">SKIP:</span> <span class="value" style="color:#fbbf24" id="skipCount">0</span>
+         <span class="label" style="margin-left:8px">ERROR:</span> <span class="value" style="color:#fca5a5" id="errorCount">0</span></div>
+  </div>
+</div>
+
+<!-- ═══════ LOG COMPACT PREVIEW ═══════ -->
+<div class="section">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <h2 style="margin:0">📋 Log hoạt động</h2>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button type="button" class="link-btn" id="linkViewAllLogs" style="font-weight:600">Xem tab Logfile →</button>
+      <button class="btn btn-clear" id="btnClearLog">Xóa log</button>
+    </div>
+  </div>
+  <div class="log-panel" id="logPanel" style="max-height:140px">
+    <div class="log-entry log-INFO">
+      <span class="log-time">--:--:--</span>
+      <span class="log-badge">INFO</span>
+      <span class="log-msg">Sẵn sàng. Chọn ngách và keyword để bắt đầu.</span>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  ⚠️ Tỷ lệ active/inactive dựa trên số kết quả Facebook hiển thị, không phản ánh hiệu quả kinh doanh.<br>
+  Với country=ALL, số inactive có thể không đầy đủ → tỷ lệ có thể cao giả tạo.
+</div>
+
+</div><!-- /#viewResearch -->
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!--  VIEW 2: TAB LOGFILE (FULL-FEATURED LOG VIEWER)                     -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="viewLogs" style="display:none">
+  <!-- Toolbar điều khiển log -->
+  <div class="section" style="padding:8px 10px;margin-bottom:6px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <h2 style="margin:0;color:#e2e8f0;font-size:.9rem">📋 Nhật ký Logfile</h2>
+        <span id="logLiveBadge" class="status-badge status-IDLE" style="font-size:.65rem">IDLE</span>
+      </div>
+      <button type="button" class="btn btn-sm" id="btnOpenLogTab" style="background:#312e81;color:#c7d2fe;border:1px solid #4338ca;padding:3px 8px;font-size:.72rem;border-radius:4px" title="Mở trang log toàn màn hình trong tab mới">
+        ↗️ Mở tab mới
+      </button>
+    </div>
+
+    <!-- Stats Bar -->
+    <div style="display:flex;gap:4px;font-size:.72rem;background:#151824;padding:5px 8px;border-radius:6px;margin-bottom:6px;justify-content:space-between">
+      <div>Tổng: <b id="statFullTotal" style="color:#e2e8f0">0</b></div>
+      <div>PASS: <b id="statFullPass" style="color:#4ade80">0</b></div>
+      <div>SKIP: <b id="statFullSkip" style="color:#fbbf24">0</b></div>
+      <div>ERROR: <b id="statFullError" style="color:#fca5a5">0</b></div>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="row" style="margin-bottom:6px;gap:6px">
+      <div style="flex:1">
+        <select id="logLevelFilter" style="padding:4px 6px;font-size:.76rem">
+          <option value="ALL">🔍 Tất cả level</option>
+          <option value="PASS">✅ Chỉ PASS</option>
+          <option value="SKIP">⏭️ Chỉ SKIP</option>
+          <option value="ERROR">❌ Chỉ ERROR</option>
+          <option value="SAVED">💾 Chỉ SAVED</option>
+          <option value="RUNNING">⚡ RUNNING</option>
+          <option value="WARN">⚠️ Cảnh báo</option>
+          <option value="INFO">ℹ️ INFO</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <input type="text" id="logSearchInput" placeholder="🔎 Tìm từ khóa..." style="padding:4px 6px;font-size:.76rem">
+      </div>
+    </div>
+
+    <!-- Actions & Auto-scroll -->
+    <div style="display:flex;gap:6px;align-items:center;justify-content:space-between">
+      <div style="display:flex;gap:4px">
+        <button type="button" class="btn btn-sm" id="btnCopyFullLog" style="background:#2a2d3e;color:#cbd5e1;padding:3px 8px;font-size:.72rem;border-radius:4px">📋 Copy</button>
+        <button type="button" class="btn btn-sm" id="btnExportFullLog" style="background:#2a2d3e;color:#cbd5e1;padding:3px 8px;font-size:.72rem;border-radius:4px">💾 Tải .log</button>
+        <button type="button" class="btn btn-sm btn-clear" id="btnClearFullLog" style="padding:3px 8px;font-size:.72rem">🗑️ Xóa</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#94a3b8;cursor:pointer;margin:0;user-select:none">
+        <input type="checkbox" id="checkAutoScroll" checked style="accent-color:#6366f1">
+        Tự cuộn
+      </label>
+    </div>
+  </div>
+
+  <!-- Full Log Panel (Tận dụng chiều cao Side Panel) -->
+  <div class="section" style="padding:6px;background:#090b10;border:1px solid #1f2438">
+    <div class="log-panel" id="fullLogPanel" style="height:calc(100vh - 240px);min-height:380px;max-height:none;font-size:.74rem">
+      <div style="color:#475569;text-align:center;padding:20px 0">Chưa có log</div>
+    </div>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
