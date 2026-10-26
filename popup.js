@@ -747,6 +747,23 @@ function setupListeners() {
     }
   });
 
+  // Nút Reload Extension (cập nhật ngay mã nguồn Service Worker từ disk)
+  const btnReload = document.getElementById('btnReloadExtension');
+  if (btnReload) {
+    btnReload.addEventListener('click', () => {
+      btnReload.textContent = '⏳ Reloading...';
+      try {
+        if (typeof chrome !== 'undefined' && chrome?.runtime?.reload) {
+          chrome.runtime.reload();
+        } else {
+          window.location.reload();
+        }
+      } catch (err) {
+        window.location.reload();
+      }
+    });
+  }
+
   // Lắng nghe thay đổi storage
   if (typeof chrome !== 'undefined' && chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
