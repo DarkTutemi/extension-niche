@@ -37,7 +37,7 @@ const DEFAULT_STATE = {
   config: {
     activeThreshold: 0.70,
     minProducts: 15,
-    maxPages: 30,
+    maxPages: 10,
     maxScrolls: 15,
     delayMin: 2,
     delayMax: 5,
@@ -774,7 +774,24 @@ async function processPage(pageIndex) {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * Tìm tab Facebook Ads Library đang mở trên trình duyệt (để tái sử dụng siêu tốc, không mở tab mới)
+ */
+async function getActiveFacebookTab() {
+  try {
+    if (typeof chrome === 'undefined' || !chrome?.tabs?.query) return null;
+    const tabs = await chrome.tabs.query({ url: '*://*.facebook.com/ads/library*' });
+    if (tabs && tabs.length > 0) {
+      return tabs.find(t => t.active) || tabs[0];
+    }
+  } catch (err) {
+    console.debug('[Background] Query active FB tab error:', err.message);
+  }
+  return null;
+}
+
+/**
  * Đọc số lượng quảng cáo (active hoặc inactive) trên trang Ad Library của 1 Page
+ * Ưu tiên gọi GraphQL siêu tốc qua tab Facebook đang mở (0.2s, 0 tabs opened)
  * @param {string} pageId
  * @param {'active'|'inactive'} status
  * @param {string} country
@@ -782,6 +799,25 @@ async function processPage(pageIndex) {
  * @returns {Promise<{count: number|null, status: 'OK'|'UNKNOWN'|'ZERO'|'BLOCKED'}>}
  */
 async function readAdCount(pageId, status, country, config) {
+  // ── Ưu tiên 1: Tái sử dụng tab Facebook đang mở (Siêu tốc, không giật màn hình) ──
+  try {
+    const fbTab = await getActiveFacebookTab();
+    if (fbTab) {
+      await injectContentScript(fbTab.id, ['selectors.js', 'content_fb.js']);
+      const resp = await sendMessageToTab(fbTab.id, {
+        type: 'READ_AD_COUNT',
+        payload: { pageId, status }
+      }, 2);
+
+      if (resp && (resp.status === 'OK' || resp.status === 'ZERO') && resp.count !== null && resp.count !== undefined) {
+        return { count: resp.count, status: resp.status };
+      }
+    }
+  } catch (fastErr) {
+    console.debug(`[Background] Fast tab query (${pageId}) fallback:`, fastErr.message);
+  }
+
+  // ── Ưu tiên 2: Fallback mở tab phụ (nếu không có tab Facebook chính) ──
   const url = buildPageUrl(pageId, status, country);
   const active = config.tabType === 'foreground';
 
@@ -805,7 +841,7 @@ async function readAdCount(pageId, status, country, config) {
         throw new Error(`BLOCKED: ${resp.reason || 'Bị Facebook chặn hoặc yêu cầu đăng nhập'}`);
       }
 
-      if (resp && (resp.status === 'OK' || resp.status === 'ZERO')) {
+      if (resp && (resp.status === 'OK' || resp.status === 'ZERO') && resp.count !== null && resp.count !== undefined) {
         return { count: resp.count, status: resp.status };
       }
 

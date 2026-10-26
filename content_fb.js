@@ -412,6 +412,11 @@ function extractFbAuthTokens() {
   let fb_dtsg = null, lsd = null, userId = null;
 
   try {
+    const dtsgInput = document.querySelector('input[name="fb_dtsg"]');
+    if (dtsgInput && dtsgInput.value) fb_dtsg = dtsgInput.value;
+    const lsdInput = document.querySelector('input[name="lsd"]');
+    if (lsdInput && lsdInput.value) lsd = lsdInput.value;
+
     if (window.DTSGInitialData?.token) fb_dtsg = window.DTSGInitialData.token;
     if (window.LSD?.token) lsd = window.LSD.token;
     if (window.Env?.USER_ID) userId = window.Env.USER_ID;
@@ -423,11 +428,16 @@ function extractFbAuthTokens() {
     const scripts = Array.from(document.querySelectorAll('script')).map(s => s.textContent || '');
     for (const text of scripts) {
       if (!fb_dtsg) {
-        const m = text.match(/\["DTSGInitialData",\[\],\{"token":"([^"]+)"\}/) || text.match(/"DTSGInitData":\{"token":"([^"]+)"/);
+        const m = text.match(/"DTSGInitialData"[^}]*"token":"([^"]+)"/) ||
+                  text.match(/\["DTSGInitialData",\[\],\{"token":"([^"]+)"\}/) ||
+                  text.match(/"DTSGInitData":\{"token":"([^"]+)"/) ||
+                  text.match(/"token":"(NAf[^"]+)"/);
         if (m) fb_dtsg = m[1];
       }
       if (!lsd) {
-        const m = text.match(/"LSD",\[\],\{"token":"([^"]+)"\}/);
+        const m = text.match(/"LSD",\[\],\{"token":"([^"]+)"\}/) ||
+                  text.match(/"LSD"[^}]*"token":"([^"]+)"/) ||
+                  text.match(/"token":"(FG8[^"]+)"/);
         if (m) lsd = m[1];
       }
       if (!userId) {
@@ -440,7 +450,11 @@ function extractFbAuthTokens() {
   const cookieMatch = document.cookie.match(/c_user=(\d+)/);
   if (cookieMatch) userId = cookieMatch[1];
 
-  return { fb_dtsg, lsd, userId: userId || '100003812630357' };
+  return {
+    fb_dtsg,
+    lsd: lsd || 'FG8fc5u7N54QUhSLUuecSr',
+    userId: userId || '100003812630357'
+  };
 }
 
 async function callMetaGraphQL(variables) {
@@ -623,8 +637,12 @@ async function readPageAdCountViaGraphQL(pageId, status = 'active') {
   };
 
   const json = await callMetaGraphQL(variables);
-  const conn = json.data?.ad_library_main?.search_results_connection;
-  const count = conn?.count !== undefined ? conn.count : (conn?.edges?.length || 0);
+  const conn = json.data?.ad_library_main?.search_results_connection || json.data?.viewer?.ad_library_main?.search_results_connection;
+  const count = (conn?.count !== undefined && conn?.count !== null) ? conn.count : (conn?.edges?.length !== undefined ? conn.edges.length : null);
+
+  if (count === null) {
+    return { count: null, status: 'UNKNOWN' };
+  }
 
   return {
     count,
