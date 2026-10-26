@@ -755,7 +755,7 @@ async function processPage(pageIndex) {
 
     // ── Bước E: Đếm sản phẩm trên website ────────────────────
     // TODO_PHASE_3: Gọi countProducts()
-    const productResult = await countProducts(adDetails.websiteUrl, state.config);
+    const productResult = await countProducts(websiteUrl, state.config);
     state = await loadState();
     state.pages[pageIndex].productCount      = productResult.count;
     state.pages[pageIndex].productSource     = productResult.source;
