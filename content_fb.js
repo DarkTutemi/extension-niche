@@ -569,7 +569,16 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
       const snap = item.snapshot || {};
       const pageId = String(item.page_id);
       const pageName = snap.page_name || item.page_name || 'Fanpage ' + pageId;
-      const websiteUrl = snap.link_url || snap.caption || null;
+      const rawWebsite = snap.link_url || snap.caption || null;
+      let websiteUrl = rawWebsite;
+      let rootDomain = null;
+      if (rawWebsite) {
+        const dec = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(rawWebsite) : null;
+        if (dec && dec.websiteUrl) {
+          websiteUrl = dec.websiteUrl;
+          rootDomain = dec.rootDomain;
+        }
+      }
 
       if (!pageMap.has(pageId)) {
         pageMap.set(pageId, {
@@ -579,15 +588,71 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
           identifier: pageId,
           isNumeric: true,
           websiteUrl,
+          websiteUrlRaw: rawWebsite,
+          rootDomain,
           sampleAdArchiveId: item.ad_archive_id
         });
       } else if (websiteUrl && !pageMap.get(pageId).websiteUrl) {
         pageMap.get(pageId).websiteUrl = websiteUrl;
+        pageMap.get(pageId).websiteUrlRaw = rawWebsite;
+        pageMap.get(pageId).rootDomain = rootDomain;
       }
     }
   }
 
   return { pages: Array.from(pageMap.values()) };
+}
+
+async function getAdDetailsViaGraphQL(pageId) {
+  const variables = {
+    activeStatus: 'active',
+    adType: 'ALL',
+    bylines: [],
+    collationToken: null,
+    contentLanguages: [],
+    countries: ['US'],
+    cursor: null,
+    excludedIDs: null,
+    first: 5,
+    isTargetedCountry: false,
+    location: null,
+    mediaType: 'all',
+    multiCountryFilterMode: null,
+    pageIDs: [String(pageId)],
+    potentialReachInput: null,
+    publisherPlatforms: [],
+    queryString: '',
+    regions: null,
+    searchType: 'page',
+    sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
+    sortData: { direction: 'DESCENDING', mode: 'SORT_BY_TOTAL_IMPRESSIONS' },
+    source: null,
+    startDate: { max: null, min: null },
+    v: 'e3d3df',
+    viewAllPageID: String(pageId)
+  };
+
+  const json = await callMetaGraphQL(variables);
+  const edges = json.data?.ad_library_main?.search_results_connection?.edges || [];
+  for (const edge of edges) {
+    for (const item of (edge.node?.collated_results || [])) {
+      const snap = item.snapshot || {};
+      const rawCta = snap.link_url || snap.caption;
+      if (rawCta) {
+        const decoded = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(rawCta) : null;
+        if (decoded && decoded.websiteUrl) {
+          return {
+            postUrl: item.ad_archive_id ? `https://www.facebook.com/ads/library/?id=${item.ad_archive_id}` : null,
+            websiteUrl: decoded.websiteUrl,
+            websiteUrlRaw: decoded.websiteUrlRaw || rawCta,
+            rootDomain: decoded.rootDomain,
+            status: 'OK'
+          };
+        }
+      }
+    }
+  }
+  return { status: 'NO_WEBSITE' };
 }
 
 async function readPageAdCountViaGraphQL(pageId, status = 'active') {
@@ -706,6 +771,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         // Lấy link bài post ads và website đích (Giai đoạn 3)
         case 'GET_AD_DETAILS': {
+          const pageId = payload?.pageId;
+          // Ưu tiên 1: Lấy siêu tốc qua Meta GraphQL nếu có pageId
+          if (pageId) {
+            try {
+              const gqlDetails = await getAdDetailsViaGraphQL(pageId);
+              if (gqlDetails && gqlDetails.websiteUrl) {
+                sendResponse({ ok: true, ...gqlDetails, source: 'GRAPHQL_API' });
+                return;
+              }
+            } catch (gqlErr) {
+              console.debug('[ContentFB] getAdDetails GraphQL fallback:', gqlErr.message);
+            }
+          }
+
+          // Ưu tiên 2: Bóc tách DOM thẻ quảng cáo
           const adDetails = await extractFirstAdDetails();
           sendResponse({ ok: true, ...adDetails });
           break;

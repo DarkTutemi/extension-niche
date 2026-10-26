@@ -712,20 +712,46 @@ async function processPage(pageIndex) {
     await addLog(`✓ ${page.pageName}: active=${ac}, inactive=${ic}, ratio=${(ratio * 100).toFixed(1)}% → PASS ratio`, 'PASS');
 
     // ── Bước D: Lấy link ads và website đích ──────────────────
-    // TODO_PHASE_3: Gọi getAdDetails()
-    const adDetails = await getAdDetails(page.pageId, state.config);
+    let websiteUrl = page.websiteUrl || null;
+    let postUrl = page.postUrl || (page.sampleAdArchiveId ? `https://www.facebook.com/ads/library/?id=${page.sampleAdArchiveId}` : null);
+    let websiteUrlRaw = page.websiteUrlRaw || page.websiteUrl || null;
+    let rootDomain = page.rootDomain || null;
+
+    if (websiteUrl) {
+      const decoded = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(websiteUrl) : null;
+      if (decoded && decoded.websiteUrl) {
+        websiteUrl = decoded.websiteUrl;
+        websiteUrlRaw = decoded.websiteUrlRaw || websiteUrl;
+        rootDomain = decoded.rootDomain || rootDomain;
+      }
+    }
+
+    // Nếu chưa có websiteUrl từ bước thu thập ban đầu, mới truy vấn thêm
+    if (!websiteUrl) {
+      const adDetails = await getAdDetails(page.pageId, state.config);
+      if (adDetails && adDetails.websiteUrl) {
+        websiteUrl = adDetails.websiteUrl;
+        websiteUrlRaw = adDetails.websiteUrlRaw;
+        rootDomain = adDetails.rootDomain;
+        if (adDetails.postUrl) postUrl = adDetails.postUrl;
+      }
+    }
+
     state = await loadState();
-    state.pages[pageIndex].postUrl       = adDetails.postUrl;
-    state.pages[pageIndex].websiteUrl    = adDetails.websiteUrl;
-    state.pages[pageIndex].websiteUrlRaw = adDetails.websiteUrlRaw;
+    state.pages[pageIndex].postUrl       = postUrl;
+    state.pages[pageIndex].websiteUrl    = websiteUrl;
+    state.pages[pageIndex].websiteUrlRaw = websiteUrlRaw;
+    state.pages[pageIndex].rootDomain    = rootDomain;
     await saveState({ pages: state.pages });
 
-    if (!adDetails.websiteUrl) {
+    if (!websiteUrl) {
       state.pages[pageIndex].status = 'SKIP';
       await saveState({ pages: state.pages });
       await addLog(`⏭ ${page.pageName}: không tìm thấy website → NO_WEBSITE`, 'SKIP');
       return;
     }
+
+    await addLog(`🔗 ${page.pageName}: phát hiện website ${rootDomain || websiteUrl}`, 'INFO');
 
     // ── Bước E: Đếm sản phẩm trên website ────────────────────
     // TODO_PHASE_3: Gọi countProducts()
@@ -871,6 +897,28 @@ async function readAdCount(pageId, status, country, config) {
  * @returns {Promise<{postUrl: string|null, websiteUrl: string|null, websiteUrlRaw: string|null, rootDomain: string|null}>}
  */
 async function getAdDetails(pageId, config) {
+  // Ưu tiên 1: Zero-Tab GraphQL qua Facebook tab đang mở sẵn
+  const activeFbTab = await getActiveFacebookTab();
+  if (activeFbTab) {
+    try {
+      const resp = await sendMessageToTab(activeFbTab.id, {
+        type: 'GET_AD_DETAILS',
+        payload: { pageId }
+      });
+      if (resp && resp.ok && resp.websiteUrl) {
+        return {
+          postUrl: resp.postUrl || null,
+          websiteUrl: resp.websiteUrl || null,
+          websiteUrlRaw: resp.websiteUrlRaw || null,
+          rootDomain: resp.rootDomain || null,
+        };
+      }
+    } catch (e) {
+      console.debug('[Background] Zero-tab getAdDetails fallback to tab:', e.message);
+    }
+  }
+
+  // Ưu tiên 2: Fallback mở tab nền nếu không có tab Facebook active
   const url = buildPageUrl(pageId, 'active', config.country || 'ALL');
   const active = config.tabType === 'foreground';
 
@@ -885,6 +933,7 @@ async function getAdDetails(pageId, config) {
 
     const resp = await sendMessageToTab(tab.id, {
       type: 'GET_AD_DETAILS',
+      payload: { pageId }
     });
 
     if (resp && resp.ok) {

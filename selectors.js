@@ -115,3 +115,63 @@ const SELECTORS = {
     waitAfterScroll: 2500,
   },
 };
+
+/**
+ * Giải mã và làm sạch link CTA từ quảng cáo Facebook
+ * Hỗ trợ bóc tách link l.facebook.com, loại bỏ tracking fbclid/utm,
+ * và trích xuất rootDomain (vd: https://yensa.com)
+ * @param {string} rawUrl
+ * @returns {{ websiteUrl: string, websiteUrlRaw: string, rootDomain: string } | null}
+ */
+function decodeCtaUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  let decoded = rawUrl.trim();
+  if (!decoded) return null;
+
+  try {
+    // Nếu là link bọc qua l.facebook.com/l.php?u=...
+    if (decoded.includes('l.facebook.com/l.php')) {
+      const u = new URL(decoded);
+      const targetParam = u.searchParams.get('u');
+      if (targetParam) {
+        decoded = decodeURIComponent(targetParam);
+      }
+    }
+
+    if (!decoded.startsWith('http://') && !decoded.startsWith('https://')) {
+      if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(decoded)) {
+        decoded = 'https://' + decoded;
+      } else {
+        return null;
+      }
+    }
+
+    const targetUrl = new URL(decoded);
+    const trackingParams = [
+      'fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 
+      'utm_term', 'utm_content', 'gclid', 'ttclid', '_ga', 'source', 'aem'
+    ];
+    for (const p of trackingParams) {
+      targetUrl.searchParams.delete(p);
+    }
+    const toDel = [];
+    for (const key of targetUrl.searchParams.keys()) {
+      if (key.startsWith('utm_') || key.startsWith('fb_') || key.startsWith('_aem')) {
+        toDel.push(key);
+      }
+    }
+    toDel.forEach(k => targetUrl.searchParams.delete(k));
+
+    return {
+      websiteUrl: targetUrl.toString(),
+      websiteUrlRaw: decoded,
+      rootDomain: targetUrl.origin
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { SELECTORS, decodeCtaUrl };
+}
