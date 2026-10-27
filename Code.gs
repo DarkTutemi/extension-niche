@@ -211,9 +211,28 @@ function doPost(e) {
       }
     }
 
-    // 7. Chuẩn bị hàng dữ liệu để ghi
+    // 7. Chuẩn bị hàng dữ liệu để ghi (tương thích đa năng với mọi định dạng gửi từ Extension & Script)
     let stt = existingRowIndex > 0 ? sheet.getRange(existingRowIndex, 1).getValue() : lastRow;
-    const ratioValue = typeof data.activeRatio === 'number' ? data.activeRatio : 0;
+    
+    // Xử lý Active Ratio (hỗ trợ cả số thập phân 0.957, số phần trăm 95.7, hoặc chuỗi '95.7%')
+    let ratioValue = 0;
+    if (typeof data.activeRatio === 'number') {
+      ratioValue = data.activeRatio > 1 ? data.activeRatio / 100 : data.activeRatio;
+    } else if (typeof data.ratio === 'number') {
+      ratioValue = data.ratio > 1 ? data.ratio / 100 : data.ratio;
+    } else if (typeof data.ratio === 'string') {
+      const parsed = parseFloat(data.ratio.replace('%', '').trim());
+      ratioValue = isNaN(parsed) ? 0 : parsed / 100;
+    } else if (typeof data.activeRatio === 'string') {
+      const parsed = parseFloat(data.activeRatio.replace('%', '').trim());
+      ratioValue = isNaN(parsed) ? 0 : parsed / 100;
+    }
+
+    const activeVal = data.activeCount != null ? data.activeCount : (data.activeAds != null ? data.activeAds : 0);
+    const inactiveVal = data.inactiveCount != null ? data.inactiveCount : (data.inactiveAds != null ? data.inactiveAds : 0);
+    const productVal = data.productCount != null ? data.productCount : (data.productsCount != null ? data.productsCount : 0);
+    const sourceVal = data.productSource || (data.isShopify ? 'Shopify JSON' : 'Sitemap') || 'N/A';
+    const postLink = data.postUrl || data.pageUrl || '';
 
     const rowValues = [
       stt,                                     // STT
@@ -221,13 +240,13 @@ function doPost(e) {
       data.keyword || '',                      // Keyword
       "'" + String(data.pageId),               // Page ID (dạng text chống mất số 0)
       data.pageName || '',                     // Tên Page
-      data.postUrl || '',                      // Link Post Ads
+      postLink,                                // Link Post Ads
       data.websiteUrl || '',                   // Link Website
-      data.activeCount !== null ? data.activeCount : 0,     // Active Ads
-      data.inactiveCount !== null ? data.inactiveCount : 0, // Inactive Ads
+      activeVal,                               // Active Ads
+      inactiveVal,                             // Inactive Ads
       ratioValue,                              // Active Ratio (số thập phân)
-      data.productCount !== null ? data.productCount : 0,   // Số sản phẩm
-      data.productSource || 'N/A',             // Nguồn đếm SP
+      productVal,                              // Số sản phẩm
+      sourceVal,                               // Nguồn đếm SP
       data.checkedAt || new Date().toLocaleString('vi-VN'), // Ngày kiểm tra
       data.status || 'PASS'                    // Trạng thái
     ];
