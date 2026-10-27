@@ -1349,6 +1349,8 @@ async function writeToSheet(pageIndex) {
       websiteUrl: page.websiteUrl || '',
       activeCount: page.activeCount,
       inactiveCount: page.inactiveCount,
+      activeAds: page.activeCount,
+      inactiveAds: page.inactiveCount,
       activeRatio: page.activeRatio,
       productCount: page.productCount,
       productSource: page.productSource || '',
