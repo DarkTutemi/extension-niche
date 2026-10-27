@@ -16,8 +16,9 @@
  * 5. Sao chép "URL ứng dụng web" (Web App URL) và dán vào Popup Extension.
  */
 
-// ── TÊN SHEET LƯU DỮ LIỆU ──────────────────────────────────────────
+// ── TÊN SHEET LƯU DỮ LIỆU STORE & CHI TIẾT ADS CREATIVES ─────────────
 const SHEET_NAME = 'FB_Ads_Research';
+const CREATIVES_SHEET_NAME = 'FB_Ads_Creatives';
 
 // ── CẤU HÌNH LIÊN KẾT GOOGLE SHEET ──────────────────────────────────
 // - Nếu tạo Apps Script từ trong Google Sheet (Tiện ích mở rộng -> Apps Script): ĐỂ TRỐNG ''.
@@ -25,7 +26,7 @@ const SHEET_NAME = 'FB_Ads_Research';
 //   (ID là chuỗi ký tự giữa /d/ và /edit trong link Google Sheet)
 const SPREADSHEET_ID = '186rhrVieyBJztWzKiDTwkf6Q-H3Zh8yWsfHgkfqQ28c';
 
-// ── CỘT DỮ LIỆU CHUẨN HÓA ──────────────────────────────────────────
+// ── CỘT DỮ LIỆU CHUẨN HÓA STORE ─────────────────────────────────────
 const HEADERS = [
   'STT',
   'Ngách',
@@ -41,6 +42,22 @@ const HEADERS = [
   'Nguồn đếm SP',
   'Ngày kiểm tra',
   'Trạng thái'
+];
+
+// ── CỘT DỮ LIỆU CHUẨN HÓA CHI TIẾT ADS CREATIVES (CHUẨN APPSHEET) ───
+const CREATIVE_HEADERS = [
+  'STT',
+  'Page ID',
+  'Tên Page',
+  'Ad ID',
+  'Dạng bài (Media)',
+  'Nút CTA',
+  'Loại CTA',
+  'Link Sản Phẩm (Ads URL)',
+  'Link Thư Viện FB',
+  'Tiêu đề Quảng Cáo',
+  'Nội dung tóm tắt',
+  'Ngày kiểm tra'
 ];
 
 /**
@@ -267,12 +284,69 @@ function doPost(e) {
     // Cột J (cột 10) = Active Ratio định dạng %
     sheet.getRange(existingRowIndex, 10).setNumberFormat('0.0%');
 
+    // 9. Xử lý ghi chi tiết toàn bộ Ads Creatives vào tab FB_Ads_Creatives (chuẩn AppSheet)
+    let creativesCount = 0;
+    if (data.ads && Array.isArray(data.ads) && data.ads.length > 0) {
+      let cSheet = ss.getSheetByName(CREATIVES_SHEET_NAME);
+      if (!cSheet) {
+        cSheet = ss.insertSheet(CREATIVES_SHEET_NAME);
+      }
+      if (cSheet.getLastRow() === 0) {
+        initCreativeSheetHeader(cSheet);
+      }
+
+      const cLastRow = cSheet.getLastRow();
+      const existingAdMap = new Map();
+      if (cLastRow > 1) {
+        const existingData = cSheet.getRange(2, 4, cLastRow - 1, 1).getValues(); // Cột D = Ad ID
+        for (let i = 0; i < existingData.length; i++) {
+          const aId = String(existingData[i][0]).trim();
+          if (aId) existingAdMap.set(aId, i + 2);
+        }
+      }
+
+      const newRows = [];
+      for (const ad of data.ads) {
+        const adIdStr = String(ad.adId || ad.adArchiveId || '').trim();
+        if (!adIdStr) continue;
+
+        const existingRow = existingAdMap.get(adIdStr);
+        const rowData = [
+          existingRow || (cLastRow + newRows.length + 1),
+          "'" + String(data.pageId),
+          data.pageName || '',
+          "'" + adIdStr,
+          ad.mediaFormat || (ad.videos?.length ? 'VIDEO' : 'IMAGE'), // VIDEO / IMAGE / CAROUSEL
+          ad.ctaText || 'Mua ngay',                                  // Nút CTA: Mua ngay, Đăng ký...
+          ad.ctaType || 'SHOP_NOW',                                  // Mã CTA: SHOP_NOW, SIGN_UP...
+          ad.destinationUrl || ad.linkUrl || '',                     // Link sản phẩm (Ads URL)
+          ad.adLibraryUrl || `https://www.facebook.com/ads/library/?id=${adIdStr}`,
+          ad.title || '',
+          ad.body ? String(ad.body).slice(0, 300) : '',
+          data.checkedAt || new Date().toLocaleString('vi-VN')
+        ];
+
+        if (existingRow) {
+          cSheet.getRange(existingRow, 1, 1, rowData.length).setValues([rowData]);
+        } else {
+          newRows.push(rowData);
+          existingAdMap.set(adIdStr, cLastRow + newRows.length);
+        }
+        creativesCount++;
+      }
+
+      if (newRows.length > 0) {
+        cSheet.getRange(cLastRow + 1, 1, newRows.length, CREATIVE_HEADERS.length).setValues(newRows);
+      }
+    }
+
     return createJsonResponse({
       ok: true,
       action: actionTaken,
       row: existingRowIndex,
       pageId: data.pageId,
-      pageName: data.pageName
+      pageName: data.pageName,
+      creativesRecorded: creativesCount
     });
 
   } catch (err) {
@@ -315,6 +389,24 @@ function initSheetHeader(sheet) {
 
   // Tự động căn chỉnh độ rộng cột
   for (let c = 1; c <= HEADERS.length; c++) {
+    sheet.autoResizeColumn(c);
+  }
+}
+
+/**
+ * Tạo Header cho Sheet Chi Tiết Ads Creatives (dành cho AppSheet)
+ */
+function initCreativeSheetHeader(sheet) {
+  sheet.getRange(1, 1, 1, CREATIVE_HEADERS.length).setValues([CREATIVE_HEADERS]);
+  const headerRange = sheet.getRange(1, 1, 1, CREATIVE_HEADERS.length);
+  headerRange.setBackground('#0f172a') // Slate 900
+             .setFontColor('#38bdf8') // Sky blue text
+             .setFontWeight('bold')
+             .setHorizontalAlignment('center')
+             .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 35);
+  sheet.setFrozenRows(1);
+  for (let c = 1; c <= CREATIVE_HEADERS.length; c++) {
     sheet.autoResizeColumn(c);
   }
 }

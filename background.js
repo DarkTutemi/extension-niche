@@ -771,12 +771,30 @@ async function processPage(pageIndex) {
       return;
     }
 
-    // ── Bước F: PASS – Ghi Google Sheet ───────────────────────
+    // ── Bước F: PASS – Bóc tách Ads Creatives & Ghi Google Sheet ──
     state.pages[pageIndex].status = 'PASS';
     await saveState({ pages: state.pages });
     await addLog(`✅ ${page.pageName}: ${productResult.count} sản phẩm (${productResult.source}) → PASS`, 'PASS');
 
-    // TODO_PHASE_4: Ghi Sheet
+    // Bóc tách toàn bộ link ads, nút CTA và dạng bài (Video/Image) qua Meta GraphQL API
+    try {
+      const fbTab = await getActiveFacebookTab();
+      if (fbTab && fbTab.id) {
+        const adsRes = await chrome.tabs.sendMessage(fbTab.id, {
+          type: 'GET_ALL_PAGE_ADS',
+          payload: { pageId: page.pageId, limit: 50 }
+        });
+        if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
+          state.pages[pageIndex].ads = adsRes.ads;
+          await saveState({ pages: state.pages });
+          await addLog(`🎬 ${page.pageName}: Đã bóc tách ${adsRes.ads.length} ads creative (Video/Image/CTA) qua API`, 'INFO');
+        }
+      }
+    } catch (e) {
+      console.debug('[Background] extractAllPageAds error:', e.message);
+    }
+
+    // Ghi Sheet (cả Store lẫn toàn bộ Ads Creatives)
     await writeToSheet(pageIndex);
 
   } catch (err) {
@@ -1235,6 +1253,7 @@ async function writeToSheet(pageIndex) {
       productSource: page.productSource || '',
       checkedAt: new Date().toLocaleString('vi-VN'),
       status: page.status || 'PASS',
+      ads: page.ads || []
     }
   };
 

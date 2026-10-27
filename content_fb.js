@@ -610,10 +610,10 @@ async function getAdDetailsViaGraphQL(pageId) {
     bylines: [],
     collationToken: null,
     contentLanguages: [],
-    countries: ['US'],
+    countries: ['ALL'],
     cursor: null,
     excludedIDs: null,
-    first: 5,
+    first: 10,
     isTargetedCountry: false,
     location: null,
     mediaType: 'all',
@@ -653,6 +653,93 @@ async function getAdDetailsViaGraphQL(pageId) {
     }
   }
   return { status: 'NO_WEBSITE' };
+}
+
+/**
+ * Bóc tách toàn bộ Ads Creatives của một Page qua Meta GraphQL API
+ * Thu thập: Ad ID, Link đích sản phẩm, Link thư viện, Nút CTA (Mua ngay...), Dạng bài (Video/Image/Carousel)
+ */
+async function extractAllAdsViaGraphQL(pageId, limit = 50) {
+  const variables = {
+    activeStatus: 'active',
+    adType: 'ALL',
+    bylines: [],
+    collationToken: null,
+    contentLanguages: [],
+    countries: ['ALL'],
+    cursor: null,
+    excludedIDs: null,
+    first: Math.min(50, limit),
+    isTargetedCountry: false,
+    location: null,
+    mediaType: 'all',
+    multiCountryFilterMode: null,
+    pageIDs: [String(pageId)],
+    potentialReachInput: null,
+    publisherPlatforms: [],
+    queryString: '',
+    regions: null,
+    searchType: 'page',
+    sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
+    sortData: { direction: 'DESCENDING', mode: 'SORT_BY_TOTAL_IMPRESSIONS' },
+    source: null,
+    startDate: { max: null, min: null },
+    v: 'e3d3df',
+    viewAllPageID: String(pageId)
+  };
+
+  const json = await callMetaGraphQL(variables);
+  const edges = json.data?.ad_library_main?.search_results_connection?.edges || [];
+  const ads = [];
+  const seenAdIds = new Set();
+
+  for (const edge of edges) {
+    for (const item of (edge.node?.collated_results || [])) {
+      const adId = String(item.ad_archive_id || '');
+      if (!adId || seenAdIds.has(adId)) continue;
+      seenAdIds.add(adId);
+
+      const snap = item.snapshot || {};
+      const rawCta = snap.link_url || snap.caption || '';
+      let cleanUrl = rawCta;
+      if (rawCta && typeof decodeCtaUrl === 'function') {
+        const dec = decodeCtaUrl(rawCta);
+        if (dec && dec.websiteUrl) cleanUrl = dec.websiteUrl;
+      }
+
+      // Xác định dạng bài (Media Format: VIDEO, IMAGE, CAROUSEL, TEXT)
+      let mediaFormat = 'IMAGE';
+      if (snap.videos && snap.videos.length > 0) {
+        mediaFormat = 'VIDEO';
+      } else if (snap.cards && snap.cards.length > 0) {
+        mediaFormat = 'CAROUSEL';
+      } else if (snap.images && snap.images.length > 0) {
+        mediaFormat = 'IMAGE';
+      } else {
+        mediaFormat = 'TEXT';
+      }
+
+      // Nút CTA và Loại CTA (Mua ngay - SHOP_NOW, Đăng ký - SIGN_UP...)
+      const ctaText = snap.cta_text || 'Mua ngay';
+      const ctaType = snap.cta_type || 'SHOP_NOW';
+
+      ads.push({
+        adId: adId,
+        adLibraryUrl: `https://www.facebook.com/ads/library/?id=${adId}`,
+        destinationUrl: cleanUrl,
+        rawUrl: rawCta,
+        mediaFormat: mediaFormat,
+        ctaText: ctaText,
+        ctaType: ctaType,
+        title: snap.title || '',
+        body: snap.body?.text || '',
+        caption: snap.caption || '',
+        creationTime: snap.creation_time || null
+      });
+    }
+  }
+
+  return { ads };
 }
 
 async function readPageAdCountViaGraphQL(pageId, status = 'active') {
@@ -788,6 +875,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Ưu tiên 2: Bóc tách DOM thẻ quảng cáo
           const adDetails = await extractFirstAdDetails();
           sendResponse({ ok: true, ...adDetails });
+          break;
+        }
+
+        // Lấy toàn bộ link ads, nút CTA và dạng bài (Video/Image) của Page
+        case 'GET_ALL_PAGE_ADS': {
+          const pageId = payload?.pageId;
+          const limit = payload?.limit || 30;
+          if (!pageId) {
+            sendResponse({ ok: false, error: 'Thiếu pageId' });
+            return;
+          }
+          try {
+            const adsResult = await extractAllAdsViaGraphQL(pageId, limit);
+            sendResponse({ ok: true, ads: adsResult.ads || [] });
+          } catch (adsErr) {
+            console.debug('[ContentFB] extractAllAds error:', adsErr.message);
+            sendResponse({ ok: false, error: adsErr.message, ads: [] });
+          }
           break;
         }
 
