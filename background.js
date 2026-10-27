@@ -467,7 +467,7 @@ async function runResearchLoop() {
         continue;
       }
 
-      await addLog(`📋 Tìm thấy ${pages.length} Page cho "${keyword}"`, 'INFO');
+      await addLog(`📋 Tìm thấy tất cả ${pages.length} Page hàng đầu cho "${keyword}"`, 'INFO');
       await saveState({ pages, currentPageIndex: 0 });
 
       // ── Bước 2: Xử lý tuần tự từng Page ──────────────────────
@@ -557,17 +557,27 @@ async function crawlPagesForKeyword(keyword, country, config) {
   const url = buildKeywordUrl(keyword, country, config);
   const active = config.tabType === 'foreground';
 
-  let tab;
+  let tab = null;
   try {
-    tab = await createTab(url, active);
+    // ── Ưu tiên 1: Tái sử dụng tab Facebook Ads Library đang mở hoặc mở tab mới ──
+    const existingFbTab = await getActiveFacebookTab();
+    if (existingFbTab && existingFbTab.id) {
+      tab = existingFbTab;
+      await chrome.tabs.update(tab.id, { url, active });
+      await addLog(`📄 Tái sử dụng tab chính Facebook Ads Library #${tab.id} để tìm kiếm từ khóa "${keyword}": ${url} (TAB ĐƯỢC GIỮ MỞ)`, 'INFO');
+    } else {
+      tab = await createTab(url, active);
+      await addLog(`📄 Mở tab chính Facebook Ads Library tìm kiếm từ khóa "${keyword}": ${url} (TAB ĐƯỢC GIỮ MỞ XUYÊN SUỐT)`, 'INFO');
+    }
+
     await waitForTabLoad(tab.id);
-    await sleepRandom(2, 4); // Chờ DOM ban đầu render
+    await sleepRandom(2, 3); // Chờ DOM ban đầu render
 
     // Inject selectors và content_fb.js
     await injectContentScript(tab.id, ['selectors.js', 'content_fb.js']);
-    await sleepRandom(1, 2); // Chờ content script khởi động
+    await sleep(1000); // Chờ content script khởi động
 
-    await addLog(`📜 Bắt đầu thu thập Page cho "${keyword}" (Media=${config.mediaType || 'ALL'}, Platform=${config.publisherPlatform || 'ALL'}, Engine=${config.crawlerEngine || 'GRAPHQL'})...`, 'RUNNING');
+    await addLog(`📜 Bắt đầu thu thập toàn bộ Page cho "${keyword}" bằng Meta GraphQL API (Media=${config.mediaType || 'ALL'}, Platform=${config.publisherPlatform || 'ALL'}, Engine=${config.crawlerEngine || 'GRAPHQL'})...`, 'RUNNING');
 
     const result = await sendMessageToTab(tab.id, {
       type: 'CRAWL_PAGES',
@@ -587,7 +597,7 @@ async function crawlPagesForKeyword(keyword, country, config) {
     }
 
     const rawPages = result.pages || [];
-    await addLog(`🔍 Thu thập được ${rawPages.length} Page thô. Bắt đầu phân giải Page ID & loại trùng...`, 'INFO');
+    await addLog(`🔍 Thu thập được ${rawPages.length} Page thô từ API. Bắt đầu phân giải Page ID & loại trùng...`, 'INFO');
 
     // Phân giải Page ID và loại trùng
     const validPages = [];
@@ -632,10 +642,10 @@ async function crawlPagesForKeyword(keyword, country, config) {
     await addLog(`❌ Crawl Page thất bại: ${err.message}`, 'ERROR');
     throw err;
   } finally {
-    if (tab) await closeExtensionTab(tab.id);
-    const state = await loadState();
-    const remaining = (state.tabsCreated || []).filter(id => id !== tab?.id);
-    await saveState({ tabsCreated: remaining });
+    // YÊU CẦU CỦA ÔNG CHỦ: TUYỆT ĐỐI KHÔNG ĐÓNG TAB NÀY KHI TÌM KIẾM XONG
+    if (tab) {
+      await addLog(`🔒 Giữ nguyên tab tìm kiếm từ khóa #${tab.id} để duy trì phiên làm việc`, 'INFO');
+    }
   }
 }
 
@@ -644,8 +654,57 @@ async function crawlPagesForKeyword(keyword, country, config) {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * Đọc số ads active/inactive trực tiếp từ tab cụ thể
+ */
+async function readAdCountFromTab(tabId, pageId, status) {
+  try {
+    const resp = await sendMessageToTab(tabId, {
+      type: 'READ_AD_COUNT',
+      payload: { pageId, status }
+    }, 2);
+    if (resp && (resp.status === 'OK' || resp.status === 'ZERO') && resp.count !== null && resp.count !== undefined) {
+      return { count: resp.count, status: resp.status };
+    }
+  } catch (err) {
+    console.debug(`[readAdCountFromTab] error:`, err.message);
+  }
+  return { count: null, status: 'UNKNOWN' };
+}
+
+/**
+ * Trích xuất link quảng cáo & website đích từ tab cụ thể
+ */
+async function getAdDetailsFromTab(tabId, pageId) {
+  try {
+    const resp = await sendMessageToTab(tabId, {
+      type: 'GET_AD_DETAILS',
+      payload: { pageId }
+    }, 2);
+    if (resp && resp.ok) {
+      return {
+        postUrl: resp.postUrl || null,
+        websiteUrl: resp.websiteUrl || null,
+        websiteUrlRaw: resp.websiteUrlRaw || null,
+        rootDomain: resp.rootDomain || null,
+      };
+    }
+  } catch (err) {
+    console.debug(`[getAdDetailsFromTab] error:`, err.message);
+  }
+  return {};
+}
+
+/**
  * Xử lý 1 Page tại vị trí pageIndex trong mảng pages
- * Tuần tự: đọc active → đọc inactive → tính ratio → lấy ads → đếm sản phẩm → ghi Sheet
+ * Quy trình quản lý Tab nghiêm ngặt theo yêu cầu của ông chủ:
+ * 1. Mở tab mới lọc theo Page, giữ tab này.
+ * 2. Check Cổng 1 (Active Ratio >= 70%): Nếu không đạt -> Đóng tab, chuyển Page tiếp.
+ *    Nếu đạt -> Giữ tab tiếp tục.
+ * 3. Nhấp/trích xuất link quảng cáo & check website (Cổng 2 - số SP):
+ *    Nếu không đạt -> Đóng tab, chuyển Page tiếp.
+ *    Nếu đạt -> Giữ tab tiếp tục.
+ * 4. Crawl toàn bộ ads kèm CTA qua API & upload Google Sheet.
+ * 5. Hoàn tất -> Đóng tab để giải phóng bộ nhớ.
  */
 async function processPage(pageIndex) {
   let state = await loadState();
@@ -657,34 +716,43 @@ async function processPage(pageIndex) {
   state.pages[pageIndex] = { ...page, status: 'PROCESSING' };
   await saveState({ pages: state.pages });
 
+  let pageTab = null;
   try {
-    // ── Bước A: Đọc số quảng cáo active ───────────────────────
-    const activeResult = await readAdCount(page.pageId, 'active', state.country, state.config);
-    state = await loadState(); // reload vì có thể đã thay đổi
+    // ── BƯỚC 1: Mở một tab mới lọc theo Page, YÊU CẦU KHÔNG ĐƯỢC ĐÓNG TAB NÀY ──
+    const pageUrl = buildPageUrl(page.pageId, 'active', state.country);
+    const active = state.config.tabType === 'foreground';
+
+    pageTab = await createTab(pageUrl, active);
+    await waitForTabLoad(pageTab.id);
+    await sleepRandom(2, 3); // Chờ load trang Page
+    await injectContentScript(pageTab.id, ['selectors.js', 'content_fb.js']);
+    await sleep(1000);
+
+    await addLog(`📑 Mở tab mới #${pageTab.id} lọc theo Page: [${page.pageName}] (Page ID: ${page.pageId})`, 'INFO');
+    await addLog(`🔒 Giữ tab #${pageTab.id} để kiểm định Cổng 1 (Active Ratio)...`, 'INFO');
+
+    // ── BƯỚC 2: Kiểm định Cổng 1 (Active Ratio >= 70%) trên tab này ──
+    const activeResult = await readAdCountFromTab(pageTab.id, page.pageId, 'active');
+    const inactiveResult = await readAdCountFromTab(pageTab.id, page.pageId, 'inactive');
+
+    state = await loadState();
     state.pages[pageIndex].activeCount  = activeResult.count;
     state.pages[pageIndex].activeStatus = activeResult.status;
-    await saveState({ pages: state.pages });
-
-    // ── Bước B: Đọc số quảng cáo inactive ─────────────────────
-    const inactiveResult = await readAdCount(page.pageId, 'inactive', state.country, state.config);
-    state = await loadState();
     state.pages[pageIndex].inactiveCount  = inactiveResult.count;
     state.pages[pageIndex].inactiveStatus = inactiveResult.status;
+    await saveState({ pages: state.pages });
 
-    // ── Bước C: Tính active ratio ─────────────────────────────
-    /**
-     * Tính tỷ lệ active_ratio = active / (active + inactive)
-     * Chỉ tính khi đọc được CẢ HAI con số và tổng > 0
-     * Nếu không đọc được → UNKNOWN, tuyệt đối không coi là PASS
-     */
-    const ac = state.pages[pageIndex].activeCount;
-    const ic = state.pages[pageIndex].inactiveCount;
+    const ac = activeResult.count;
+    const ic = inactiveResult.count;
 
     if (ac === null || ic === null) {
       state.pages[pageIndex].status = 'UNKNOWN';
       state.pages[pageIndex].activeRatio = null;
       await saveState({ pages: state.pages });
       await addLog(`❓ ${page.pageName}: không đọc được số ads → UNKNOWN`, 'ERROR');
+      await addLog(`🗑️ Đóng tab #${pageTab.id} của [${page.pageName}] do không xác định được số ads`, 'INFO');
+      await closeExtensionTab(pageTab.id);
+      pageTab = null;
       return;
     }
 
@@ -693,25 +761,34 @@ async function processPage(pageIndex) {
       state.pages[pageIndex].status = 'SKIP';
       state.pages[pageIndex].activeRatio = 0;
       await saveState({ pages: state.pages });
-      await addLog(`⏭ ${page.pageName}: tổng ads = 0 → SKIP`, 'SKIP');
+      await addLog(`⏭ ${page.pageName}: tổng ads = 0 → KHÔNG ĐẠT CỔNG 1 (SKIP)`, 'SKIP');
+      await addLog(`🗑️ Đóng tab #${pageTab.id} của [${page.pageName}] do không đạt Cổng 1`, 'INFO');
+      await closeExtensionTab(pageTab.id);
+      pageTab = null;
       return;
     }
 
     const ratio = ac / total;
-    state.pages[pageIndex].activeRatio = Math.round(ratio * 10000) / 10000; // 4 chữ số thập phân
+    state.pages[pageIndex].activeRatio = Math.round(ratio * 10000) / 10000;
     await saveState({ pages: state.pages });
 
-    // Kiểm tra ngưỡng
+    // Kiểm tra ngưỡng Cổng 1
     if (ratio < state.config.activeThreshold) {
       state.pages[pageIndex].status = 'SKIP';
       await saveState({ pages: state.pages });
-      await addLog(`⏭ ${page.pageName}: ratio=${(ratio * 100).toFixed(1)}% < ngưỡng ${(state.config.activeThreshold * 100)}% → SKIP`, 'SKIP');
+      await addLog(`⏭ ${page.pageName}: ratio=${(ratio * 100).toFixed(1)}% < ngưỡng ${(state.config.activeThreshold * 100)}% → KHÔNG ĐẠT CỔNG 1 (SKIP)`, 'SKIP');
+      await addLog(`🗑️ Đóng tab #${pageTab.id} của [${page.pageName}] do không đạt Cổng 1`, 'INFO');
+      await closeExtensionTab(pageTab.id);
+      pageTab = null;
       return;
     }
 
-    await addLog(`✓ ${page.pageName}: active=${ac}, inactive=${ic}, ratio=${(ratio * 100).toFixed(1)}% → PASS ratio`, 'PASS');
+    // ĐẠT CỔNG 1: GIỮ TAB ĐỂ LÀM TIẾP CÔNG ĐOẠN CHECK WEBSITE!
+    await addLog(`✓ ${page.pageName}: active=${ac}, inactive=${ic}, ratio=${(ratio * 100).toFixed(1)}% → ĐẠT CHUẨN CỔNG 1 (PASS)`, 'PASS');
+    await addLog(`📌 GIỮ NGUYÊN tab #${pageTab.id} [${page.pageName}] để thực hiện công đoạn tiếp theo: Nhấp vào link quảng cáo & kiểm tra website...`, 'INFO');
 
-    // ── Bước D: Lấy link ads và website đích ──────────────────
+    // ── BƯỚC 3: Nhấp vào link quảng cáo & kiểm tra website (Cổng 2) ──
+    await addLog(`🔗 Đang nhấp/trích xuất link quảng cáo trên tab #${pageTab.id} [${page.pageName}]...`, 'INFO');
     let websiteUrl = page.websiteUrl || null;
     let postUrl = page.postUrl || (page.sampleAdArchiveId ? `https://www.facebook.com/ads/library/?id=${page.sampleAdArchiveId}` : null);
     let websiteUrlRaw = page.websiteUrlRaw || page.websiteUrl || null;
@@ -726,9 +803,9 @@ async function processPage(pageIndex) {
       }
     }
 
-    // Nếu chưa có websiteUrl từ bước thu thập ban đầu, mới truy vấn thêm
+    // Nếu chưa có websiteUrl từ bước cào danh sách, trích xuất trực tiếp trên pageTab
     if (!websiteUrl) {
-      const adDetails = await getAdDetails(page.pageId, state.config);
+      const adDetails = await getAdDetailsFromTab(pageTab.id, page.pageId);
       if (adDetails && adDetails.websiteUrl) {
         websiteUrl = adDetails.websiteUrl;
         websiteUrlRaw = adDetails.websiteUrlRaw;
@@ -747,14 +824,16 @@ async function processPage(pageIndex) {
     if (!websiteUrl) {
       state.pages[pageIndex].status = 'SKIP';
       await saveState({ pages: state.pages });
-      await addLog(`⏭ ${page.pageName}: không tìm thấy website → NO_WEBSITE`, 'SKIP');
+      await addLog(`⏭ ${page.pageName}: không tìm thấy link website đích từ quảng cáo → SKIP`, 'SKIP');
+      await addLog(`🗑️ Đóng tab #${pageTab.id} của [${page.pageName}] do không có website`, 'INFO');
+      await closeExtensionTab(pageTab.id);
+      pageTab = null;
       return;
     }
 
-    await addLog(`🔗 ${page.pageName}: phát hiện website ${rootDomain || websiteUrl}`, 'INFO');
+    await addLog(`🔗 [${page.pageName}]: Phát hiện website đích ${rootDomain || websiteUrl}`, 'INFO');
+    await addLog(`🌐 Đang quét website kiểm tra số lượng sản phẩm: ${websiteUrl}...`, 'INFO');
 
-    // ── Bước E: Đếm sản phẩm trên website ────────────────────
-    // TODO_PHASE_3: Gọi countProducts()
     const productResult = await countProducts(websiteUrl, state.config);
     state = await loadState();
     state.pages[pageIndex].productCount      = productResult.count;
@@ -763,45 +842,60 @@ async function processPage(pageIndex) {
     state.pages[pageIndex].websiteCheckStatus = productResult.status;
     await saveState({ pages: state.pages });
 
+    // Kiểm tra Cổng 2 (số lượng sản phẩm phù hợp logic)
     if (productResult.count === null || productResult.count < state.config.minProducts) {
       state.pages[pageIndex].status = 'SKIP';
       await saveState({ pages: state.pages });
-      const countStr = productResult.count !== null ? productResult.count : 'UNKNOWN';
-      await addLog(`⏭ ${page.pageName}: sản phẩm=${countStr} < ${state.config.minProducts} → SKIP`, 'SKIP');
+      const countStr = productResult.count !== null ? productResult.count : '0';
+      await addLog(`⏭ ${page.pageName}: sản phẩm=${countStr} < ${state.config.minProducts} → KHÔNG ĐẠT CỔNG 2 (Shop quá nhỏ/rác)`, 'SKIP');
+      await addLog(`🗑️ Đóng tab #${pageTab.id} của [${page.pageName}] do không đạt Cổng 2`, 'INFO');
+      await closeExtensionTab(pageTab.id);
+      pageTab = null;
       return;
     }
 
-    // ── Bước F: PASS – Bóc tách Ads Creatives & Ghi Google Sheet ──
+    // Đạt Cổng 2 -> WINNER STORE! TIẾP TỤC GIỮ TAB NÀY ĐỂ BÓC TÁCH CREATIVES & UPLOAD
     state.pages[pageIndex].status = 'PASS';
     await saveState({ pages: state.pages });
-    await addLog(`✅ ${page.pageName}: ${productResult.count} sản phẩm (${productResult.source}) → PASS`, 'PASS');
+    await addLog(`✅ ${page.pageName}: ${productResult.count} sản phẩm (${productResult.source}) → ĐẠT CHUẨN CỔNG 2 (WINNER STORE 🏆)`, 'PASS');
+    await addLog(`📌 TIẾP TỤC GIỮ TAB #${pageTab.id} [${page.pageName}] để crawl toàn bộ link quảng cáo kèm CTA qua API...`, 'INFO');
 
-    // Bóc tách toàn bộ link ads, nút CTA và dạng bài (Video/Image) qua Meta GraphQL API
+    // ── BƯỚC 4: Crawl toàn bộ link quảng cáo kèm CTA của Page đó & upload lên Google Sheet ──
+    await addLog(`🎬 Đang crawl toàn bộ quảng cáo kèm CTA của Page [${page.pageName}] qua API trên tab #${pageTab.id}...`, 'INFO');
     try {
-      const fbTab = await getActiveFacebookTab();
-      if (fbTab && fbTab.id) {
-        const adsRes = await chrome.tabs.sendMessage(fbTab.id, {
-          type: 'GET_ALL_PAGE_ADS',
-          payload: { pageId: page.pageId, limit: 50 }
-        });
-        if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
-          state.pages[pageIndex].ads = adsRes.ads;
-          await saveState({ pages: state.pages });
-          await addLog(`🎬 ${page.pageName}: Đã bóc tách ${adsRes.ads.length} ads creative (Video/Image/CTA) qua API`, 'INFO');
-        }
+      const adsRes = await sendMessageToTab(pageTab.id, {
+        type: 'GET_ALL_PAGE_ADS',
+        payload: { pageId: page.pageId, limit: 50 }
+      }, 2);
+      if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
+        state.pages[pageIndex].ads = adsRes.ads;
+        await saveState({ pages: state.pages });
+        await addLog(`📦 Đã bóc tách thành công ${adsRes.ads.length} ads creative (Video/Image/CTA) cho [${page.pageName}]`, 'INFO');
       }
-    } catch (e) {
-      console.debug('[Background] extractAllPageAds error:', e.message);
+    } catch (adsErr) {
+      console.debug('[Background] extractAllPageAds error:', adsErr.message);
     }
 
-    // Ghi Sheet (cả Store lẫn toàn bộ Ads Creatives)
+    // Upload lên Google Sheet
+    await addLog(`📤 Đang upload dữ liệu Store và chi tiết ads creative của [${page.pageName}] lên Google Sheet...`, 'INFO');
     await writeToSheet(pageIndex);
+    await addLog(`💾 [${page.pageName}]: Đã upload thành công lên Google Sheet!`, 'SAVED');
+
+    // Sau khi upload hoàn tất trọn vẹn cho Page WINNER -> Đóng tab để giải phóng tài nguyên
+    await addLog(`🗑️ Hoàn tất quy trình phân tích & upload cho [${page.pageName}]. Đóng tab #${pageTab.id} để giải phóng bộ nhớ`, 'INFO');
+    await closeExtensionTab(pageTab.id);
+    pageTab = null;
 
   } catch (err) {
     state = await loadState();
     state.pages[pageIndex].status = 'ERROR';
     await saveState({ pages: state.pages });
     await addLog(`❌ ${page.pageName}: ${err.message}`, 'ERROR');
+    if (pageTab) {
+      await addLog(`🗑️ Đóng tab #${pageTab.id} của [${page.pageName}] do xảy ra lỗi`, 'INFO');
+      await closeExtensionTab(pageTab.id);
+      pageTab = null;
+    }
 
     // Phát hiện CAPTCHA/chặn → tạm dừng toàn bộ
     if (err.message.includes('BLOCKED') || err.message.includes('CAPTCHA')) {
