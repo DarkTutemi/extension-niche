@@ -142,6 +142,14 @@ async function addLog(message, type = 'INFO') {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * Tạm dừng cố định ms mili-giây
+ * @param {number} ms
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Tạm dừng ngẫu nhiên trong khoảng [minSec, maxSec] giây
  * Mô phỏng hành vi người dùng thật, giảm nguy cơ bị phát hiện bot
  */
