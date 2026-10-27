@@ -37,8 +37,7 @@ const DEFAULT_STATE = {
   config: {
     activeThreshold: 0.70,
     minProducts: 15,
-    maxPages: 10,
-    maxScrolls: 15,
+    maxPages: 0, // 0 = Cào toàn bộ không giới hạn
     delayMin: 2,
     delayMax: 5,
     tabType: 'background',
@@ -627,7 +626,7 @@ async function crawlPagesForKeyword(keyword, country, config) {
         activeRatio: null,
       });
 
-      if (validPages.length >= config.maxPages) {
+      if (config.maxPages && config.maxPages > 0 && validPages.length >= config.maxPages) {
         break;
       }
     }

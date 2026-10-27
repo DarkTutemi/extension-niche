@@ -506,7 +506,7 @@ async function callMetaGraphQL(variables) {
   return { data: mergedData };
 }
 
-async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxPages = 30 }) {
+async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxPages = 0 }) {
   // Lấy keyword từ URL nếu không truyền
   let queryKeyword = keyword;
   if (!queryKeyword) {
@@ -519,17 +519,18 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
   let queryStr = isExact ? `"${queryKeyword}"` : queryKeyword;
   let activeSearchType = config.searchType || 'KEYWORD_UNORDERED';
   const targetCountry = country === 'ALL' ? 'US' : country;
+  const targetMax = (maxPages && Number(maxPages) > 0) ? Number(maxPages) : 0;
 
-  const buildVariables = (q, sType) => ({
+  const buildVariables = (q, sType, cursor = null) => ({
     activeStatus: 'active',
     adType: 'ALL',
     bylines: [],
     collationToken: null,
     contentLanguages: [],
     countries: targetCountry === 'ALL' ? ['US'] : [targetCountry],
-    cursor: null,
+    cursor,
     excludedIDs: null,
-    first: Math.min(30, maxPages),
+    first: 30,
     isTargetedCountry: false,
     location: null,
     mediaType: (config.mediaType || 'video').toLowerCase(),
@@ -551,52 +552,79 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
     viewAllPageID: '0'
   });
 
+  const pageMap = new Map();
+  const processEdges = (edgesList) => {
+    for (const edge of edgesList) {
+      const collated = edge.node?.collated_results || [];
+      for (const item of collated) {
+        if (!item.page_id) continue;
+        const snap = item.snapshot || {};
+        const pageId = String(item.page_id);
+        const pageName = snap.page_name || item.page_name || 'Fanpage ' + pageId;
+        const rawWebsite = snap.link_url || snap.caption || null;
+        let websiteUrl = rawWebsite;
+        let rootDomain = null;
+        if (rawWebsite) {
+          const dec = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(rawWebsite) : null;
+          if (dec && dec.websiteUrl) {
+            websiteUrl = dec.websiteUrl;
+            rootDomain = dec.rootDomain;
+          }
+        }
+
+        if (!pageMap.has(pageId)) {
+          pageMap.set(pageId, {
+            pageName,
+            pageUrl: snap.page_profile_uri || `https://www.facebook.com/${pageId}/`,
+            pageId,
+            identifier: pageId,
+            isNumeric: true,
+            websiteUrl,
+            websiteUrlRaw: rawWebsite,
+            rootDomain,
+            sampleAdArchiveId: item.ad_archive_id
+          });
+        } else if (websiteUrl && !pageMap.get(pageId).websiteUrl) {
+          pageMap.get(pageId).websiteUrl = websiteUrl;
+          pageMap.get(pageId).websiteUrlRaw = rawWebsite;
+          pageMap.get(pageId).rootDomain = rootDomain;
+        }
+      }
+    }
+  };
+
   let json = await callMetaGraphQL(buildVariables(queryStr, activeSearchType));
-  let edges = json.data?.ad_library_main?.search_results_connection?.edges || [];
+  let conn = json.data?.ad_library_main?.search_results_connection;
+  let edges = conn?.edges || [];
+  let pageInfo = conn?.page_info;
 
   // Fallback thông minh: nếu tìm kiếm Exact Phrase trả về 0 kết quả, tự động thử lại dạng Unordered
   if (edges.length === 0 && isExact) {
     console.debug('[ContentFB] Exact phrase trả về 0 kết quả, chuyển sang tìm kiếm từ khóa mở rộng...');
     json = await callMetaGraphQL(buildVariables(queryKeyword, 'KEYWORD_UNORDERED'));
-    edges = json.data?.ad_library_main?.search_results_connection?.edges || [];
+    conn = json.data?.ad_library_main?.search_results_connection;
+    edges = conn?.edges || [];
+    pageInfo = conn?.page_info;
   }
 
-  const pageMap = new Map();
-  for (const edge of edges) {
-    const collated = edge.node?.collated_results || [];
-    for (const item of collated) {
-      if (!item.page_id) continue;
-      const snap = item.snapshot || {};
-      const pageId = String(item.page_id);
-      const pageName = snap.page_name || item.page_name || 'Fanpage ' + pageId;
-      const rawWebsite = snap.link_url || snap.caption || null;
-      let websiteUrl = rawWebsite;
-      let rootDomain = null;
-      if (rawWebsite) {
-        const dec = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(rawWebsite) : null;
-        if (dec && dec.websiteUrl) {
-          websiteUrl = dec.websiteUrl;
-          rootDomain = dec.rootDomain;
-        }
-      }
+  processEdges(edges);
 
-      if (!pageMap.has(pageId)) {
-        pageMap.set(pageId, {
-          pageName,
-          pageUrl: snap.page_profile_uri || `https://www.facebook.com/${pageId}/`,
-          pageId,
-          identifier: pageId,
-          isNumeric: true,
-          websiteUrl,
-          websiteUrlRaw: rawWebsite,
-          rootDomain,
-          sampleAdArchiveId: item.ad_archive_id
-        });
-      } else if (websiteUrl && !pageMap.get(pageId).websiteUrl) {
-        pageMap.get(pageId).websiteUrl = websiteUrl;
-        pageMap.get(pageId).websiteUrlRaw = rawWebsite;
-        pageMap.get(pageId).rootDomain = rootDomain;
-      }
+  // Phân trang tự động bằng cursor để lấy TOÀN BỘ Page qua API
+  let pageCount = 1;
+  const maxLoops = targetMax > 0 ? Math.ceil(targetMax / 20) : 10;
+  while (pageInfo?.has_next_page && pageInfo?.end_cursor && pageCount < maxLoops) {
+    if (targetMax > 0 && pageMap.size >= targetMax) break;
+    pageCount++;
+    try {
+      const nextJson = await callMetaGraphQL(buildVariables(queryStr, activeSearchType, pageInfo.end_cursor));
+      const nextConn = nextJson.data?.ad_library_main?.search_results_connection;
+      const nextEdges = nextConn?.edges || [];
+      pageInfo = nextConn?.page_info;
+      if (nextEdges.length === 0) break;
+      processEdges(nextEdges);
+    } catch (pageErr) {
+      console.debug('[ContentFB] GraphQL pagination loop error:', pageErr.message);
+      break;
     }
   }
 

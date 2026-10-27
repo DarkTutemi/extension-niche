@@ -155,7 +155,6 @@ const configInputs = {
   activeThreshold:   $('#activeThreshold'),
   minProducts:       $('#minProducts'),
   maxPages:          $('#maxPages'),
-  maxScrolls:        $('#maxScrolls'),
   delayMin:          $('#delayMin'),
   delayMax:          $('#delayMax'),
   tabType:           $('#tabType'),
@@ -609,9 +608,9 @@ function setupListeners() {
 
     const config = {
       activeThreshold:   parseInt(configInputs.activeThreshold.value, 10) / 100,
-      minProducts:       parseInt(configInputs.minProducts.value, 10),
-      maxPages:          parseInt(configInputs.maxPages.value, 10),
-      maxScrolls:        parseInt(configInputs.maxScrolls.value, 10),
+      minProducts:       parseInt(configInputs.minProducts.value, 10) || 0,
+      maxPages:          parseInt(configInputs.maxPages.value, 10) || 0,
+      maxScrolls:        0,
       delayMin:          parseInt(configInputs.delayMin.value, 10),
       delayMax:          parseInt(configInputs.delayMax.value, 10),
       tabType:           configInputs.tabType.value,
@@ -875,8 +874,9 @@ function updateUIFromState(state) {
       ? `${curPage.pageName || curPage.pageId} (${currentPageIndex + 1}/${pages.length})`
       : '—';
 
-    const totalExpected = keywords.length * (state.config?.maxPages || 30);
-    const processed     = (currentKeywordIndex * (state.config?.maxPages || 30)) + currentPageIndex;
+    const perKwExpected = (state.config?.maxPages > 0) ? state.config.maxPages : (pages.length || 10);
+    const totalExpected = keywords.length * perKwExpected;
+    const processed     = (currentKeywordIndex * perKwExpected) + currentPageIndex;
     const pct = totalExpected > 0 ? Math.min(100, Math.round((processed / totalExpected) * 100)) : 0;
     elProgressText.textContent = `${pct}% (${processed}/${totalExpected} page)`;
 

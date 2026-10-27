@@ -298,34 +298,47 @@ textarea{width:100%;background:#2a2d3e;border:1px solid #3b3f54;border-radius:5p
 <div class="section">
   <div class="config-toggle" id="configToggle">
     <span class="arrow" id="configArrow">▶</span>
-    <h2 style="margin:0">⚙️ Cấu hình nâng cao</h2>
+    <h2 style="margin:0">⚙️ Tiêu chuẩn lọc & Cấu hình vận hành</h2>
   </div>
   <div class="config-body" id="configBody">
+    <div style="font-size:0.75rem; font-weight:700; color:#818cf8; text-transform:uppercase; margin-bottom:6px; letter-spacing:0.5px">🎯 Tiêu chuẩn sàng lọc (2 Cổng)</div>
     <div class="row">
       <div class="col">
-        <label for="activeThreshold">Ngưỡng active (%)</label>
+        <label for="activeThreshold">Cổng 1: Ngưỡng active (%)</label>
         <input type="number" id="activeThreshold" value="70" min="1" max="100">
       </div>
       <div class="col">
-        <label for="minProducts">Sản phẩm tối thiểu</label>
+        <label for="minProducts">Cổng 2: SP website tối thiểu</label>
         <select id="minProducts">
-          <option value="15" selected>15</option>
-          <option value="20">20</option>
-          <option value="10">10</option>
-          <option value="5">5</option>
+          <option value="15" selected>≥ 15 SP (Khuyên dùng)</option>
+          <option value="20">≥ 20 SP</option>
+          <option value="10">≥ 10 SP</option>
+          <option value="5">≥ 5 SP</option>
+          <option value="0">Tất cả (Không lọc số SP)</option>
         </select>
       </div>
     </div>
+
+    <div style="font-size:0.75rem; font-weight:700; color:#818cf8; text-transform:uppercase; margin:8px 0 6px 0; letter-spacing:0.5px">⚡ Thu thập & Vận hành (100% API)</div>
     <div class="row">
       <div class="col">
-        <label for="maxPages">Tối đa Page/keyword</label>
-        <input type="number" id="maxPages" value="10" min="1" max="200">
+        <label for="maxPages">Số lượng Page thu thập</label>
+        <select id="maxPages">
+          <option value="0" selected>⚡ Toàn bộ (Không giới hạn - Khuyên dùng)</option>
+          <option value="50">Tối đa 50 Page</option>
+          <option value="30">Tối đa 30 Page</option>
+          <option value="10">Tối đa 10 Page (Test nhanh)</option>
+        </select>
       </div>
       <div class="col">
-        <label for="maxScrolls">Tối đa lần cuộn</label>
-        <input type="number" id="maxScrolls" value="15" min="1" max="100">
+        <label for="tabType">Kiểu mở tab</label>
+        <select id="tabType">
+          <option value="background" selected>Nền (background)</option>
+          <option value="foreground">Nổi (foreground)</option>
+        </select>
       </div>
     </div>
+
     <div class="row">
       <div class="col">
         <label for="delayMin">Delay tối thiểu (s)</label>
@@ -336,18 +349,10 @@ textarea{width:100%;background:#2a2d3e;border:1px solid #3b3f54;border-radius:5p
         <input type="number" id="delayMax" value="5" min="1" max="60">
       </div>
     </div>
-    <div class="row">
-      <div class="col">
-        <label for="tabType">Kiểu mở tab</label>
-        <select id="tabType">
-          <option value="background">Nền (background)</option>
-          <option value="foreground">Nổi (foreground)</option>
-        </select>
-      </div>
-    </div>
+
     <div class="col" style="margin-bottom:6px">
       <label for="sheetsUrl">Google Apps Script URL</label>
-      <input type="text" id="sheetsUrl" value="https://script.google.com/macros/s/AKfycbx_Ti0IcauK97DYrBDy3CVyIoU9GyesRjytl6W38kDRCMDTEhEtKQZKNEs1ar7q-x_Z/exec" placeholder="https://script.google.com/macros/s/...">
+      <input type="text" id="sheetsUrl" value="https://script.google.com/macros/s/AKfycbxkK_w6gHRswlP8xhxZB8khEB32s81QmbUZF9LeJcnDKYZtaauW8Oh88QGbYpnmi-pn/exec" placeholder="https://script.google.com/macros/s/...">
     </div>
     <div class="col">
       <label for="secretKey">Secret Key (webhook)</label>
