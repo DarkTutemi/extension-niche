@@ -83,6 +83,10 @@ Trong quá trình kiểm thử thực tế với các từ khóa ngách Beauty, 
 
 | Thương hiệu | Từ khóa phát hiện | Website đích | Tỷ lệ Ads Active | Số sản phẩm Shopify | Đánh giá tổng hợp |
 | :--- | :--- | :--- | :---: | :---: | :--- |
+### 🏆 3.1. Kết Quả Thẩm Định Thực Tế Ngách Beauty (Trích đoạn)
+
+| Thương hiệu | Từ khóa phát hiện | Website đích | Tỷ lệ Ads Active | Số sản phẩm Shopify | Đánh giá tổng hợp |
+| :--- | :--- | :--- | :---: | :---: | :--- |
 | **Trish McEvoy** | `mascara volume` | `https://www.trishmcevoy.com` | **100.0%** (15/15) | **187 SP** | 🏆 **CERTIFIED WINNER** |
 | **rem beauty** | `mascara volume` | `https://rembeauty.com` | **95.8%** (23/24) | **99 SP** | 🏆 **CERTIFIED WINNER** |
 | **OFIR Beauty** | `mascara volume` | `https://ofirbeauty.com` | **100.0%** (22/22) | **63 SP** | 🏆 **CERTIFIED WINNER** |
@@ -90,6 +94,18 @@ Trong quá trình kiểm thử thực tế với các từ khóa ngách Beauty, 
 | **YENSA Beauty** | `BB cream` | `https://yensa.com` | **96.8%** (30/31) | **55 SP** | 🏆 **CERTIFIED WINNER** |
 | **purlisse** | `BB cream` | `https://purlisse.com` | **100.0%** (30/30) | **55 SP** | 🏆 **CERTIFIED WINNER** |
 | **Lash Therapy Australia** | `eyelash serum` | `https://lashtherapyaustralia.com` | **100.0%** (9/9) | **55 SP** | 🏆 **CERTIFIED WINNER** |
+
+### 🚗 3.2. Kết Quả Thẩm Định Chiến Dịch 10 Từ Khóa Ngách Car (27 WINNER STORES)
+
+> Xem báo cáo chi tiết đầy đủ tại: [reports/TEST_REPORT_CAR_10_KEYWORDS.md](file:///f:/Clone-shopify/fb-ads-research-extension/reports/TEST_REPORT_CAR_10_KEYWORDS.md)
+
+Hệ thống đã quét qua 10 từ khóa ngách Car (`magnetic phone mount`, `car wax`, `windshield sun shade`, `car vacuum cleaner`, `car cleaning kit`, `dash cam`, `car air freshener`, `car seat cover`, `steering wheel cover`, `car wash foam`), rà soát 126 Fanpage và phát hiện **27 WINNER STORES**, bóc tách **74 Ads Creatives** đồng bộ đồng thời lên 2 bảng Google Sheet:
+- **Mob Armor** (`magnetic phone mount`): 100% active (30/30), 69 SP, 8 Video Ads.
+- **Seat Cover Solutions** (`steering wheel cover`): 100% active (24/24), 22 SP, 16 Video Ads.
+- **WolfBox** (`dash cam`): 100% active (29/29), 163 SP, 9 Video Ads.
+- **Chemical Guys** (`car cleaning kit` & `car wash foam`): 100% active (25/25), 250 SP, 4 Video Ads.
+- **Redtiger Dash Cam** (`dash cam`): 100% active (20/20), 166 SP, 4 Video Ads.
+- **Coverland Car & Seat Covers** (`car seat cover`): 100% active (30/30), 6.633 SP, 1 Video Ad.
 
 ---
 
@@ -112,7 +128,13 @@ fb-ads-research-extension/
 ├── TEST_PROMPT.md             # Kịch bản kiểm thử toàn diện đa tầng (Visual, DOM, API, Logfile, ECC)
 ├── README.md                  # Tài liệu hướng dẫn kỹ thuật & logic vận hành chi tiết
 ├── .ecc/                      # Bộ công cụ kiểm thử tự động eval-harness.js (17/17 Passed)
-└── icons/                     # Bộ icon đại diện của tiện ích (16px, 48px, 128px)
+├── icons/                     # Bộ icon đại diện của tiện ích (16px, 48px, 128px)
+├── reports/                   # Thư mục lưu trữ các báo cáo kiểm chuẩn chi tiết
+│   └── TEST_REPORT_CAR_10_KEYWORDS.md # Báo cáo kiểm định 10 từ khóa ngách Car (27 Winners, 74 Creatives)
+└── scripts/                   # Bộ công cụ & kịch bản kiểm thử tự động độc lập
+    ├── run_full_campaign_analysis.js  # Runner tự động hóa toàn diện 10 từ khóa
+    ├── sync_active_inactive_sheet.js  # Đồng bộ chỉ số Active/Inactive lên Google Sheet
+    └── fb_api_crawler.js              # Client Meta GraphQL API crawler độc lập
 ```
 
 ---
