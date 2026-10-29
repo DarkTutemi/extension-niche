@@ -303,7 +303,7 @@ function doPost(e) {
     const productVal = data.productCount != null ? data.productCount : (data.productsCount != null ? data.productsCount : 0);
     const sourceVal = data.productSource || (data.isShopify ? 'Shopify JSON' : 'Sitemap') || 'N/A';
 
-    const inoteLink = data.inoteUrl || data.linkPostAds || '';
+    const inoteLink = data.postUrl || data.inoteUrl || data.linkPostAds || data.pageUrl || '';
     const rowValues = [
       stt,                                     // 1. STT
       data.niche || 'N/A',                     // 2. Ngách

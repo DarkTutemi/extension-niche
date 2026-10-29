@@ -902,19 +902,27 @@ async function processPage(pageIndex) {
         state.pages[pageIndex].ads = adsRes.ads;
         await saveState({ pages: state.pages });
 
-        // Trích xuất toàn bộ link chiến dịch từ tất cả bài ad
+        // Trích xuất toàn bộ link chiến dịch định dạng l.facebook.com/l.php?u=... theo đúng yêu cầu ông chủ
         const allCampUrls = [];
         for (const ad of adsRes.ads) {
-          if (ad.destinationUrl && !ad.destinationUrl.includes('facebook.com') && !ad.destinationUrl.includes('fb.com')) {
-            allCampUrls.push(ad.destinationUrl);
-          } else if (ad.rawUrl && !ad.rawUrl.includes('facebook.com') && !ad.rawUrl.includes('fb.com')) {
-            const dec = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(ad.rawUrl) : null;
-            if (dec && dec.websiteUrl) allCampUrls.push(dec.websiteUrl);
+          let fbLink = ad.rawUrl || '';
+          if (!fbLink.includes('l.facebook.com/l.php')) {
+            const dest = ad.destinationUrl || ad.rawUrl;
+            if (dest) {
+              fbLink = 'https://l.facebook.com/l.php?u=' + encodeURIComponent(dest);
+            }
           }
-          if (Array.isArray(ad.cardUrls)) {
-            for (const cUrl of ad.cardUrls) {
-              if (cUrl && !cUrl.includes('facebook.com') && !cUrl.includes('fb.com')) {
-                allCampUrls.push(cUrl);
+          if (fbLink) {
+            allCampUrls.push(fbLink);
+          }
+          if (Array.isArray(ad.rawCardUrls)) {
+            for (const cUrl of ad.rawCardUrls) {
+              let cFbLink = cUrl;
+              if (!cFbLink.includes('l.facebook.com/l.php')) {
+                cFbLink = 'https://l.facebook.com/l.php?u=' + encodeURIComponent(cUrl);
+              }
+              if (cFbLink) {
+                allCampUrls.push(cFbLink);
               }
             }
           }
@@ -1520,6 +1528,8 @@ async function writeToSheet(pageIndex) {
       productSource: page.productSource || '',
       inoteUrl: page.inoteUrl || '',
       linkPostAds: page.inoteUrl || page.linkPostAds || '',
+      postUrl: page.inoteUrl || page.linkPostAds || '',
+      pageUrl: page.inoteUrl || page.linkPostAds || '',
       checkedAt: new Date().toLocaleString('vi-VN'),
       status: page.status || 'PASS',
       ads: page.ads || []

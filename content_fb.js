@@ -775,10 +775,19 @@ async function extractAllAdsViaGraphQL(pageId, limit = 300, config = {}) {
 
         // Thu thập các link con nếu là Carousel cards
         const cardUrls = [];
+        const rawCardUrls = [];
         if (Array.isArray(snap.cards)) {
           for (const card of snap.cards) {
             const cardRaw = card.link_url || card.caption || '';
             if (cardRaw) {
+              let rawFormatted = cardRaw;
+              if (!rawFormatted.includes('l.facebook.com/l.php')) {
+                rawFormatted = 'https://l.facebook.com/l.php?u=' + encodeURIComponent(cardRaw);
+              }
+              if (!rawCardUrls.includes(rawFormatted)) {
+                rawCardUrls.push(rawFormatted);
+              }
+
               let cardClean = cardRaw;
               if (typeof decodeCtaUrl === 'function') {
                 const dec = decodeCtaUrl(cardRaw);
@@ -791,9 +800,15 @@ async function extractAllAdsViaGraphQL(pageId, limit = 300, config = {}) {
           }
         }
 
-        // Nếu rawCta rỗng mà có cardUrls thì lấy link đầu tiên của card
-        if (!rawCta && cardUrls.length > 0) {
-          rawCta = cardUrls[0];
+        // Nếu rawCta rỗng mà có rawCardUrls thì lấy link đầu tiên của card
+        if (!rawCta && rawCardUrls.length > 0) {
+          rawCta = rawCardUrls[0];
+        }
+
+        // Đảm bảo định dạng chuẩn l.facebook.com/l.php?u=... theo yêu cầu của ông chủ
+        let rawFbLink = rawCta;
+        if (rawFbLink && !rawFbLink.includes('l.facebook.com/l.php')) {
+          rawFbLink = 'https://l.facebook.com/l.php?u=' + encodeURIComponent(rawFbLink);
         }
 
         let cleanUrl = rawCta;
@@ -823,7 +838,8 @@ async function extractAllAdsViaGraphQL(pageId, limit = 300, config = {}) {
           adLibraryUrl: `https://www.facebook.com/ads/library/?id=${adId}`,
           destinationUrl: cleanUrl,
           cardUrls: cardUrls,
-          rawUrl: rawCta,
+          rawUrl: rawFbLink || rawCta,
+          rawCardUrls: rawCardUrls,
           mediaFormat: mediaFormat,
           ctaText: ctaText,
           ctaType: ctaType,
