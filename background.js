@@ -808,7 +808,7 @@ async function processPage(pageIndex) {
     if (ratio < state.config.activeThreshold) {
       state.pages[pageIndex].status = 'SKIP';
       await saveState({ pages: state.pages });
-      await addLog(`⏭ ${page.pageName}: ratio=${(ratio * 100).toFixed(1)}% < ngưỡng ${(state.config.activeThreshold * 100)}% → KHÔNG ĐẠT CỔNG 1 (SKIP)`, 'SKIP');
+      await addLog(`⏭ ${page.pageName}: active=${ac}, inactive=${ic}, ratio=${(ratio * 100).toFixed(1)}% < ngưỡng ${(state.config.activeThreshold * 100)}% → KHÔNG ĐẠT CỔNG 1 (SKIP)`, 'SKIP');
       await addLog(`🗑️ Đóng tab #${pageTab.id} của [${page.pageName}] do không đạt Cổng 1`, 'INFO');
       await closeExtensionTab(pageTab.id);
       pageTab = null;

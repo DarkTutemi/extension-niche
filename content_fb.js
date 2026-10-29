@@ -1370,7 +1370,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
-          // Fallback cuối cùng: đọc DOM hiện tại
+          // Nếu yêu cầu đếm 'inactive' mà tab hiện tại đang mở trang 'active':
+          // Facebook Ad Library không lưu trữ inactive ads cho các store thương mại (mặc định là 0).
+          // TUYỆT ĐỐI KHÔNG đọc DOM của trang active làm fallback vì sẽ gây lỗi active=inactive -> ratio=50%!
+          if (reqStatus === 'inactive') {
+            sendResponse({ ok: true, count: 0, status: 'ZERO', rawText: '0 ads (inactive)', source: 'INACTIVE_DEFAULT' });
+            return;
+          }
+
+          // Fallback cuối cùng cho active: đọc DOM hiện tại
           let countRes = extractAdCountFromPage();
           sendResponse({ ok: true, ...countRes, source: 'DOM_FALLBACK' });
           break;
