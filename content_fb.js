@@ -1194,7 +1194,8 @@ async function readPageAdCountViaGraphQL(pageId, status = 'active') {
 
   const json = await callMetaGraphQL(variables);
   const conn = json.data?.ad_library_main?.search_results_connection || json.data?.viewer?.ad_library_main?.search_results_connection;
-  const count = (conn?.count !== undefined && conn?.count !== null) ? conn.count : (conn?.edges?.length !== undefined ? conn.edges.length : null);
+  // TUYỆT ĐỐI không lấy conn.edges.length làm tổng số ad (vì edges.length chỉ là kích thước mảng 1 trang pagination)
+  const count = (conn?.count !== undefined && conn?.count !== null) ? conn.count : null;
 
   if (count === null) {
     return { count: null, status: 'UNKNOWN' };
@@ -1206,6 +1207,63 @@ async function readPageAdCountViaGraphQL(pageId, status = 'active') {
     rawText: `${count}${hasNext ? '+' : ''} ads (GraphQL)`,
     status: count === 0 ? 'ZERO' : 'OK'
   };
+}
+
+/**
+ * Trợ thủ bóc tách tổng số kết quả từ chuỗi HTML thô
+ */
+function parseResultCountFromHtml(html) {
+  if (!html || typeof html !== 'string') return null;
+  if (
+    html.includes('No ads match your criteria') ||
+    html.includes('Không có quảng cáo nào khớp') ||
+    html.includes('Không tìm thấy kết quả') ||
+    html.includes('không có kết quả') ||
+    html.includes('0 results') ||
+    html.includes('0 kết quả')
+  ) {
+    return 0;
+  }
+  const match = html.match(/[~≈]?\s*([\d.,]+)\s*(?:results|kết quả)/i);
+  if (match) {
+    const cleanNum = match[1].replace(/[.,]/g, '');
+    const num = parseInt(cleanNum, 10);
+    return isNaN(num) ? null : num;
+  }
+  return null;
+}
+
+/**
+ * Tạo URL Thư viện quảng cáo theo đúng bộ lọc và trạng thái
+ */
+function buildAdLibraryUrlForStatus(pageId, status, config = {}) {
+  const country = config.country || 'US';
+  const mediaType = config.mediaType || 'all';
+  const publisherPlatform = config.publisherPlatform || null;
+  const startDateMin = config.startDateMin || null;
+
+  const params = new URLSearchParams({
+    active_status: status,
+    ad_type: 'all',
+    country: country,
+    is_targeted_country: 'false',
+    media_type: mediaType,
+    search_type: 'page',
+    'sort_data[mode]': 'total_impressions',
+    'sort_data[direction]': 'desc',
+    source: 'page-transparency-widget',
+    view_all_page_id: String(pageId)
+  });
+
+  if (publisherPlatform && publisherPlatform !== 'all') {
+    params.set('publisher_platforms[0]', publisherPlatform);
+  }
+  if (startDateMin) {
+    params.set('start_date[min]', startDateMin);
+    params.set('start_date[max]', '');
+  }
+
+  return `https://www.facebook.com/ads/library/?${params.toString()}`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1259,10 +1317,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         // Đọc số kết quả quảng cáo trên trang của Page
         case 'READ_AD_COUNT': {
-          // Ưu tiên 1: Thử truy vấn qua GraphQL nếu có thông tin Page ID
+          const reqStatus = (payload?.status || 'active').toLowerCase();
+
+          // ƯU TIÊN 1 TUYỆT ĐỐI: Đọc trực tiếp từ DOM nếu tab đang mở đúng trạng thái này!
+          // Đảm bảo số lượng hiển thị trên log trùng khớp 100% với con số người dùng nhìn thấy (~64 hoặc ~110)!
+          const currentUrl = window.location.href;
+          const isCurrentActive = !currentUrl.includes('active_status=inactive');
+          const isMatching = (reqStatus === 'active' && isCurrentActive) || (reqStatus === 'inactive' && currentUrl.includes('active_status=inactive'));
+
+          if (isMatching) {
+            let countRes = extractAdCountFromPage();
+            if (countRes.status !== 'UNKNOWN') {
+              sendResponse({ ok: true, ...countRes, source: 'DOM_VISIBLE' });
+              return;
+            }
+            await sleep(2000);
+            countRes = extractAdCountFromPage();
+            if (countRes.status !== 'UNKNOWN') {
+              sendResponse({ ok: true, ...countRes, source: 'DOM_VISIBLE' });
+              return;
+            }
+          }
+
+          // Ưu tiên 2: Nếu cần kiểm tra trạng thái khác (ví dụ: inactive), fetch URL tương ứng với session hiện tại
           if (payload && payload.pageId) {
             try {
-              const apiCount = await readPageAdCountViaGraphQL(payload.pageId, payload.status || 'active');
+              const fetchUrl = buildAdLibraryUrlForStatus(payload.pageId, reqStatus, payload.config || {});
+              const res = await fetch(fetchUrl, { credentials: 'include' });
+              if (res.ok) {
+                const html = await res.text();
+                const parsed = parseResultCountFromHtml(html);
+                if (parsed !== null) {
+                  sendResponse({ ok: true, count: parsed, status: parsed === 0 ? 'ZERO' : 'OK', source: 'FETCH_HTML' });
+                  return;
+                }
+              }
+            } catch (fetchErr) {
+              console.debug('[ContentFB] Fetch status count fallback:', fetchErr.message);
+            }
+          }
+
+          // Ưu tiên 3: Thử truy vấn qua GraphQL nếu có trường count chuẩn
+          if (payload && payload.pageId) {
+            try {
+              const apiCount = await readPageAdCountViaGraphQL(payload.pageId, reqStatus);
               if (apiCount && apiCount.status !== 'UNKNOWN') {
                 sendResponse({ ok: true, ...apiCount, source: 'GRAPHQL_API' });
                 return;
@@ -1272,13 +1370,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
-          // Ưu tiên 2: Chờ và đọc số kết quả hiển thị trên DOM
+          // Fallback cuối cùng: đọc DOM hiện tại
           let countRes = extractAdCountFromPage();
-          if (countRes.status === 'UNKNOWN') {
-            await sleep(2500);
-            countRes = extractAdCountFromPage();
-          }
-          sendResponse({ ok: true, ...countRes });
+          sendResponse({ ok: true, ...countRes, source: 'DOM_FALLBACK' });
           break;
         }
 

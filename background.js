@@ -350,24 +350,39 @@ function buildKeywordUrl(keyword, country = 'ALL', config = {}) {
 }
 
 /**
- * Tạo URL xem quảng cáo của 1 Page (active hoặc inactive)
+ * Tạo URL xem quảng cáo của 1 Page (active hoặc inactive) đồng bộ đầy đủ bộ lọc từ cấu hình
  * @param {string} pageId
  * @param {'active'|'inactive'} status
- * @param {string} country
+ * @param {object|string} configOrCountry
  */
-function buildPageUrl(pageId, status, country = 'ALL') {
+function buildPageUrl(pageId, status, configOrCountry = {}) {
+  const config = typeof configOrCountry === 'string' ? { country: configOrCountry } : (configOrCountry || {});
+  const country = config.country || 'ALL';
+  const mediaType = config.mediaType || 'all';
+  const publisherPlatform = config.publisherPlatform || null;
+  const startDateMin = config.startDateMin || null;
+
   const params = new URLSearchParams({
     active_status: status,
     ad_type: 'all',
-    country,
+    country: country,
     is_targeted_country: 'false',
-    media_type: 'all',
+    media_type: mediaType,
     search_type: 'page',
     'sort_data[mode]': 'total_impressions',
     'sort_data[direction]': 'desc',
     source: 'page-transparency-widget',
-    view_all_page_id: pageId,
+    view_all_page_id: String(pageId),
   });
+
+  if (publisherPlatform && publisherPlatform !== 'all') {
+    params.set('publisher_platforms[0]', publisherPlatform);
+  }
+  if (startDateMin) {
+    params.set('start_date[min]', startDateMin);
+    params.set('start_date[max]', '');
+  }
+
   return `https://www.facebook.com/ads/library/?${params.toString()}`;
 }
 
@@ -669,11 +684,11 @@ async function crawlPagesForKeyword(keyword, country, config) {
 /**
  * Đọc số ads active/inactive trực tiếp từ tab cụ thể
  */
-async function readAdCountFromTab(tabId, pageId, status) {
+async function readAdCountFromTab(tabId, pageId, status, config = {}) {
   try {
     const resp = await sendMessageToTab(tabId, {
       type: 'READ_AD_COUNT',
-      payload: { pageId, status }
+      payload: { pageId, status, config }
     }, 2);
     if (resp && (resp.status === 'OK' || resp.status === 'ZERO') && resp.count !== null && resp.count !== undefined) {
       return { count: resp.count, status: resp.status };
@@ -735,7 +750,8 @@ async function processPage(pageIndex) {
   let pageTab = null;
   try {
     // ── BƯỚC 1: Mở một tab mới lọc theo Page, YÊU CẦU KHÔNG ĐƯỢC ĐÓNG TAB NÀY ──
-    const pageUrl = buildPageUrl(page.pageId, 'active', state.country);
+    const pageConfig = { ...(state.config || {}), country: state.country || state.config?.country || 'ALL' };
+    const pageUrl = buildPageUrl(page.pageId, 'active', pageConfig);
     const active = state.config.tabType === 'foreground';
 
     pageTab = await createTab(pageUrl, active);
@@ -748,8 +764,8 @@ async function processPage(pageIndex) {
     await addLog(`🔒 Giữ tab #${pageTab.id} để kiểm định Cổng 1 (Active Ratio)...`, 'INFO');
 
     // ── BƯỚC 2: Kiểm định Cổng 1 (Active Ratio >= 70%) trên tab này ──
-    const activeResult = await readAdCountFromTab(pageTab.id, page.pageId, 'active');
-    const inactiveResult = await readAdCountFromTab(pageTab.id, page.pageId, 'inactive');
+    const activeResult = await readAdCountFromTab(pageTab.id, page.pageId, 'active', pageConfig);
+    const inactiveResult = await readAdCountFromTab(pageTab.id, page.pageId, 'inactive', pageConfig);
 
     state = await loadState();
     state.pages[pageIndex].activeCount  = activeResult.count;
@@ -968,7 +984,8 @@ async function getActiveFacebookTab() {
  * @param {object} config
  * @returns {Promise<{count: number|null, status: 'OK'|'UNKNOWN'|'ZERO'|'BLOCKED'}>}
  */
-async function readAdCount(pageId, status, country, config) {
+async function readAdCount(pageId, status, country, config = {}) {
+  const pageConfig = { ...(config || {}), country: country || config?.country || 'ALL' };
   // ── Ưu tiên 1: Tái sử dụng tab Facebook đang mở (Siêu tốc, không giật màn hình) ──
   try {
     const fbTab = await getActiveFacebookTab();
@@ -976,7 +993,7 @@ async function readAdCount(pageId, status, country, config) {
       await injectContentScript(fbTab.id, ['selectors.js', 'content_fb.js']);
       const resp = await sendMessageToTab(fbTab.id, {
         type: 'READ_AD_COUNT',
-        payload: { pageId, status }
+        payload: { pageId, status, config: pageConfig }
       }, 2);
 
       if (resp && (resp.status === 'OK' || resp.status === 'ZERO') && resp.count !== null && resp.count !== undefined) {
@@ -988,7 +1005,7 @@ async function readAdCount(pageId, status, country, config) {
   }
 
   // ── Ưu tiên 2: Fallback mở tab phụ (nếu không có tab Facebook chính) ──
-  const url = buildPageUrl(pageId, status, country);
+  const url = buildPageUrl(pageId, status, pageConfig);
   const active = config.tabType === 'foreground';
 
   // Thử tối đa 2 lần nếu trạng thái là UNKNOWN
@@ -1004,7 +1021,7 @@ async function readAdCount(pageId, status, country, config) {
 
       const resp = await sendMessageToTab(tab.id, {
         type: 'READ_AD_COUNT',
-        payload: { pageId, status }
+        payload: { pageId, status, config: pageConfig }
       });
 
       if (resp && resp.status === 'BLOCKED') {
