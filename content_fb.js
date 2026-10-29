@@ -1345,12 +1345,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'READ_AD_COUNT': {
           const reqStatus = (payload?.status || 'active').toLowerCase();
 
-          // ƯU TIÊN 1 TUYỆT ĐỐI: Đọc trực tiếp từ DOM nếu tab đang mở đúng trạng thái này!
-          // Đảm bảo số lượng hiển thị trên log trùng khớp 100% với con số người dùng nhìn thấy (~64 hoặc ~110)!
-          const currentUrl = window.location.href;
-          const isCurrentActive = !currentUrl.includes('active_status=inactive');
-          const isMatching = (reqStatus === 'active' && isCurrentActive) || (reqStatus === 'inactive' && currentUrl.includes('active_status=inactive'));
+          // Kiểm tra URL tab hiện tại
+          const currentUrl = (typeof window !== 'undefined' && window.location?.href) ? window.location.href : '';
+          const isCurrentActive = currentUrl.includes('active_status=active') || !currentUrl.includes('active_status=inactive');
+          const isCurrentInactive = currentUrl.includes('active_status=inactive');
+          const isMatching = (reqStatus === 'active' && isCurrentActive) || (reqStatus === 'inactive' && isCurrentInactive);
 
+          // ƯU TIÊN 1 TUYỆT ĐỐI: Đọc trực tiếp từ DOM nếu tab đang mở đúng trạng thái này!
           if (isMatching) {
             let countRes = extractAdCountFromPage();
             if (countRes.status !== 'UNKNOWN') {
@@ -1365,25 +1366,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
-          // Ưu tiên 2: Nếu cần kiểm tra trạng thái khác (ví dụ: inactive), fetch URL tương ứng với session hiện tại
-          if (payload && payload.pageId) {
-            try {
-              const fetchUrl = buildAdLibraryUrlForStatus(payload.pageId, reqStatus, payload.config || {});
-              const res = await fetch(fetchUrl, { credentials: 'include' });
-              if (res.ok) {
-                const html = await res.text();
-                const parsed = parseResultCountFromHtml(html);
-                if (parsed !== null) {
-                  sendResponse({ ok: true, count: parsed, status: parsed === 0 ? 'ZERO' : 'OK', source: 'FETCH_HTML' });
-                  return;
-                }
-              }
-            } catch (fetchErr) {
-              console.debug('[ContentFB] Fetch status count fallback:', fetchErr.message);
-            }
-          }
-
-          // Ưu tiên 3: Thử truy vấn qua GraphQL nếu có trường count chuẩn
+          // ƯU TIÊN 2: Thử truy vấn qua GraphQL nếu có pageId
           if (payload && payload.pageId) {
             try {
               const apiCount = await readPageAdCountViaGraphQL(payload.pageId, reqStatus, payload.config || {});
@@ -1392,19 +1375,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 return;
               }
             } catch (apiErr) {
-              console.debug('[ContentFB] GraphQL API count fallback to DOM:', apiErr.message);
+              console.debug('[ContentFB] GraphQL API count fallback:', apiErr.message);
             }
           }
 
-          // Kiểm tra xem tab hiện tại có đang hiển thị đúng active_status mà payload yêu cầu không
-          const currentUrl = (typeof window !== 'undefined' && window.location?.href) ? window.location.href : '';
-          const isCurrentActive = currentUrl.includes('active_status=active');
-          const isCurrentInactive = currentUrl.includes('active_status=inactive');
-
+          // Ngăn ngừa bẫy đọc chéo: Tab active tuyệt đối không đọc DOM hay bịa số 0 cho inactive
           if (reqStatus === 'inactive' && isCurrentActive) {
-            // Tab hiện tại đang mở active ads. TUYỆT ĐỐI không đọc DOM của active làm inactive!
-            // Cũng KHÔNG được gán mặc định là 0 vì store có thể có hàng ngàn inactive ads!
-            // Trả về UNKNOWN để background mở tab helper kiểm tra DOM trang inactive thực tế.
             sendResponse({ ok: false, count: null, status: 'UNKNOWN', reason: 'TAB_ACTIVE_CANNOT_READ_INACTIVE' });
             return;
           }
@@ -1414,9 +1390,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
           }
 
-          // Fallback cuối cùng: đọc DOM hiện tại khi tab đang hiển thị đúng trạng thái tương ứng
+          // Fallback cuối cùng: đọc DOM hiện tại khi trạng thái khớp
           let countRes = extractAdCountFromPage();
           sendResponse({ ok: true, ...countRes, source: 'DOM_FALLBACK' });
+          break;
           break;
         }
 
