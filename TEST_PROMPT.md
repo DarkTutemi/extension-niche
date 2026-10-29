@@ -50,7 +50,7 @@ Một tính năng chỉ được chứng nhận **ĐẠT (PASS)** khi thỏa mã
 
 ### 2.2. Khởi tạo phiên kiểm thử:
 ```bash
-# 1. Chạy bộ đánh giá kiểm tra cú pháp và logic ban đầu (yêu cầu 17/17 PASS)
+# 1. Chạy bộ đánh giá kiểm tra cú pháp và logic ban đầu (yêu cầu 29/29 PASS)
 node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
 
 # 2. Khởi động máy chủ cục bộ phục vụ kiểm thử Side Panel / Popup
@@ -124,9 +124,9 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
 
 ---
 
-### 🔹 SUITE 3: KIỂM THỬ BỘ LỌC ADS LIBRARY, TÍNH TOÁN NGÀY LÙI & CHUẨN HÓA ENUM
+### 🔹 SUITE 3: KIỂM THỬ BỘ LỌC ADS LIBRARY, TÍNH TOÁN NGÀY LÙI, CHUẨN HÓA ENUM & LOWERCASE URL PARAMS
 
-* **Mục tiêu:** Kiểm tra bộ lọc chuyên sâu, thuật toán tính ngày lùi (Min Date 1-12 tháng) và cơ chế chuẩn hóa Enum tránh lỗi GraphQL Schema.
+* **Mục tiêu:** Kiểm tra bộ lọc chuyên sâu, thuật toán tính ngày lùi (Min Date 1-12 tháng), chuẩn hóa Enum GraphQL và ép chữ thường toàn bộ param trên URL (chống lỗi rớt bộ lọc dẫn tới 110 ads).
 * **Các bước thực hiện:**
   1. **Kiểm tra tính toán ngày tự động:**
      * Lần lượt đổi `#minMonthsAgo` từ `1`, `3`, `6`, `12` tháng.
@@ -134,11 +134,16 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
   2. **Kiểm tra chuẩn hóa Enum `sortMode` cho Meta GraphQL:**
      * Meta GraphQL schema (`AdLibrarySearchPaginationQuery`) **chỉ chấp nhận**: `SORT_BY_TOTAL_IMPRESSIONS` hoặc `SORT_BY_RELEVANCY_MONTHLY_GROUPED`.
      * Nếu người dùng chọn "Ngày bắt đầu mới nhất (Recent)", trên Web URL gửi `sort_data[mode]=start_date`, nhưng biến GraphQL `sortData.mode` **phải được tự động ép về enum hợp lệ** (`SORT_BY_TOTAL_IMPRESSIONS`), tuyệt đối không gửi `SORT_BY_START_DATE` làm sập truy vấn GraphQL.
-  3. **Làm sạch từ khóa tự động (Quote Sanitization):**
+  3. **Chuẩn hóa chữ thường cho tham số URL (`buildPageUrl` & `buildAdLibraryUrlForStatus`):**
+     * Facebook Ads Library URL router chỉ nhận diện chữ thường: `media_type=video`, `publisher_platforms[0]=facebook`.
+     * Nếu truyền chữ HOA (`VIDEO`, `FACEBOOK`), Facebook sẽ bỏ qua bộ lọc và hiển thị tất cả ads (ví dụ 110 ads thay vì 64 ads).
+     * Hàm `buildPageUrl` và `buildAdLibraryUrlForStatus` bắt buộc phải chuyển sang chữ thường bằng `.toLowerCase()` và chỉ gắn `publisher_platforms` khi khác `'all'`.
+  4. **Làm sạch từ khóa tự động (Quote Sanitization):**
      * Tự động gọt sạch dấu ngoặc kép thừa ở 2 đầu từ khóa (`replace(/^["']+|["']+$/g, '')`), tránh lỗi lồng ngoặc kép `""Bibles and Coffee""` làm mất kết quả.
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
   * `startDateMin` luôn có định dạng chuẩn `YYYY-MM-DD`.
   * Nhãn `minDateDisplay` hiển thị định dạng người dùng `DD/MM/YYYY`.
+  * URL tab con Page luôn chứa `media_type=video` và `publisher_platforms[0]=facebook` dạng chữ thường.
   * Không bao giờ phát sinh lỗi GraphQL schema invalid enum.
 
 ---
@@ -169,16 +174,21 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
 
 ### 🔹 SUITE 5: KIỂM THỬ QUY TRÌNH VÒNG ĐỜI TAB & CỔNG 1 (ACTIVE RATIO $\ge 70\%$)
 
-* **Mục tiêu:** Thẩm định việc kiểm soát Tab trực quan: Tab Mẹ luôn giữ mở; Tab Con của từng Page mở ra kiểm tra Cổng 1, đóng khi không đạt, giữ khi đạt.
+* **Mục tiêu:** Thẩm định việc kiểm soát Tab trực quan: Tab Mẹ luôn giữ mở; Tab Con của từng Page mở ra kiểm tra Cổng 1 với bộ lọc đồng bộ, đóng khi không đạt, giữ khi đạt.
 * **Các bước thực hiện:**
   1. **Kiểm tra Tab Mẹ (Tìm kiếm Từ Khóa):**
      * Khi bắt đầu cào từ khóa, Extension mở hoặc tái sử dụng tab Facebook Ads Library.
      * Sau khi cào xong danh sách Page, **KHÔNG ĐƯỢC ĐÓNG TAB NÀY**.
      * Log minh chứng: `[INFO] 🔒 Giữ nguyên tab tìm kiếm từ khóa #... để duy trì phiên làm việc`.
   2. **Kiểm tra Tab Con từng Page & Cổng 1:**
-     * Mở tab mới: `[INFO] 📑 Mở tab mới #... lọc theo Page: [Tên Page] (Page ID: ...)`.
+     * Mở tab mới với URL chứa đầy đủ bộ lọc đã chuẩn hóa chữ thường: `[INFO] 📄 Mở tab #...: https://www.facebook.com/ads/library/?...`.
      * Log giữ tab: `[INFO] 🔒 Giữ tab #... để kiểm định Cổng 1 (Active Ratio)...`.
-     * Đọc số `active` và `inactive` ads trên tab này qua API.
+     * **Cơ chế đọc Active Count ưu tiên DOM trực tiếp (`DOM_VISIBLE`):**
+       * Đọc trực tiếp con số hiển thị trên trang (`~64 results`), đảm bảo số liệu ghi nhận trên log khớp 100% với con số người dùng nhìn thấy trên tab.
+       * Tuyệt đối không lấy `conn.edges.length` (kích thước trang phân trang) làm tổng số active ads.
+     * **Chống bẫy lỗi Active Ratio 50%:**
+       * Đối với thương hiệu Dropship/E-commerce thông thường, Facebook xóa ads đã tắt sau vài ngày (inactive = 0).
+       * Khi truy vấn `inactive` trên tab đang mở trang `active`, content script **tuyệt đối không đọc DOM active làm fallback** (vì sẽ gây `active == inactive` dẫn đến ratio 50% sai lệch), mà trả về `0` (`INACTIVE_DEFAULT`).
      * Tính toán: $\text{Active Ratio} = \frac{\text{Active}}{\text{Active} + \text{Inactive}}$.
      * **Trường hợp RỚT (< 70%):**
        * In log: `[SKIP] ⏭ <Tên Page>: ratio=...% < ngưỡng 70% → KHÔNG ĐẠT CỔNG 1 (SKIP)`.
@@ -191,7 +201,8 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
   * Tab Mẹ không bao giờ bị đóng trong suốt quá trình chạy.
   * Tab Con rớt Cổng 1 được đóng dứt khoát; Tab Con đạt Cổng 1 được giữ nguyên.
-  * Mọi hành động mở, giữ, đóng tab đều in rõ số hiệu Tab `#ID` trên logfile.
+  * Mọi hành động mở, giữ, đóng tab đều in rõ số hiệu Tab `#ID` và URL đầy đủ trên logfile.
+  * Không bao giờ bị lỗi rớt về ratio 50% do đọc nhầm DOM active cho inactive.
 
 ---
 
@@ -316,7 +327,7 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
      node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
      ```
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
-  * **17/17 tiêu chí PASS 100%.**
+  * **29/29 tiêu chí PASS 100%.**
   * Số lượng catch block rỗng: **0** (Zero empty catch blocks).
   * Cú pháp JavaScript hợp lệ (`node -c` không báo lỗi trên mọi file).
 
@@ -341,7 +352,7 @@ Khi phát hiện bất kỳ bài test nào bị **FAIL**:
     │  Thêm test case gây lỗi vào .ecc/eval-harness.js để chống tái phát (Regression Guard)
     ▼
 [BƯỚC 5: KIỂM TRA HỒI QUY TOÀN BỘ]
-    │  Chạy lại node .ecc/eval-harness.js đảm bảo 17/17 tests đều PASS
+    │  Chạy lại node .ecc/eval-harness.js đảm bảo 29/29 tests đều PASS
     ▼
 [BƯỚC 6: COMMIT, PUSH GIT VÀ BÁO CÁO MINH CHỨNG]
 ```
@@ -358,9 +369,13 @@ Khi phát hiện bất kỳ bài test nào bị **FAIL**:
 - [ ] Tích hợp bộ **Fallback 4 Tầng thông minh**: Exact $\rightarrow$ Unordered $\rightarrow$ Bỏ lọc ngày $\rightarrow$ mediaType=all để không bao giờ bị 0 kết quả ngoài ý muốn.
 - [ ] Ghi chuẩn dòng log: `[INFO] 📋 Tìm thấy tất cả xxx Page hàng đầu cho "<từ khóa>"`.
 - [ ] Tab Con của từng Page được mở riêng; đóng ngay khi rớt Cổng 1 hoặc Cổng 2; giữ nguyên khi đạt chuẩn để crawl ads và upload Google Sheet.
+- [ ] Chuẩn hóa chữ thường cho mọi tham số bộ lọc trên URL (`media_type=video`, `publisher_platforms[0]=facebook`) tránh việc Facebook Ads Library bỏ qua bộ lọc và hiển thị sai tổng số ads (110 thay vì 64).
+- [ ] Ngăn chặn triệt để bẫy đọc nhầm DOM active cho inactive gây tụt Active Ratio về 50.0% giả lập.
+- [ ] Đồng bộ toàn bộ cấu hình bộ lọc (`mediaType`, `publisherPlatform`, `startDateMin`) vào mọi truy vấn Meta GraphQL.
+- [ ] Hiển thị đầy đủ chuỗi URL không bị cắt ngắn trên bảng log khi mở tab.
 - [ ] Trích xuất 100% chính xác link **Reel & Story Facebook (`story.php?story_fbid=...&id=...`)** từ CDN URL và `storyID` Base64 để soi lượt like, comment, share.
 - [ ] Đồng bộ Cột F ở cả 2 bảng Google Sheet: Cột F của `FB_Ads_Research` và `FB_Ads_Creatives` hiển thị link bài post thực tế thay vì link thư viện.
 - [ ] Tuyệt đối **không phát sinh SyntaxError** `Identifier has already been declared` khi nạp lại extension nhờ cơ chế ping `CHECK_READY` và `globalThis`.
 - [ ] Hàm `sleep(ms)` và `sleepRandom()` hoạt động trơn tru trong background, không phát sinh `sleep is not defined`.
 - [ ] Google Apps Script Webhook hoạt động ổn định với `SPREADSHEET_ID` chuẩn, không bị lỗi `getSheetByName`.
-- [ ] Bộ kiểm thử `.ecc/eval-harness.js` đạt điểm tuyệt đối **17/17 PASS**.
+- [ ] Bộ kiểm thử `.ecc/eval-harness.js` đạt điểm tuyệt đối **29/29 PASS**.

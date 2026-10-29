@@ -75,6 +75,18 @@ flowchart TD
 - Extension tích hợp sẵn nút **`🔄 Reload`** ở góc trên cùng bên phải giao diện Side Panel và Popup.
 - Khi bấm nút, tiện ích lập tức thực thi `chrome.runtime.reload()`, giải phóng bộ nhớ cũ và nạp lại code mới nhất chỉ trong **0.5 giây**.
 
+### 🎬 5. Giải Mã Link Post / Reel Facebook Soi Tương Tác Thực Tế (`story.php` / `reel`)
+- **Vấn đề**: Facebook Ads Library chỉ cung cấp link lưu trữ quảng cáo chung (`ads/library/?id=...`), không hiển thị bình luận, lượt Like hay tương tác tự nhiên của khách hàng.
+- **Giải pháp bóc tách Media ID & Story ID**:
+  - Hàm `extractFbMediaIdFromUrl` bắt chuẩn xác Media/Video ID 14-18 chữ số từ URL ảnh thu nhỏ hoặc video CDN Facebook (`_(\d{14,18})_`).
+  - Sinh đường link bài viết chuẩn: `https://www.facebook.com/story.php?story_fbid=${videoId}&id=${pageId}`.
+  - Đồng bộ trực tiếp vào **Cột F (`Link Post Ads` / `Link Post / Reel FB (Tương tác)`)** trên cả 2 bảng Google Sheets (`FB_Ads_Research` và `FB_Ads_Creatives`). Người dùng nhấp vào link là mở thẳng bài post trên Facebook để soi comment phản hồi sản phẩm và đánh giá độ hot thực tế.
+
+### 🎯 6. Chuẩn Hóa Tham Số Bộ Lọc URL & Đồng Bộ Meta GraphQL Toàn Diện
+- **Khắc phục lỗi rớt bộ lọc**: Facebook Ads Library URL router chỉ chấp nhận các giá trị tham số dạng chữ thường (`media_type=video`, `publisher_platforms[0]=facebook`). Các hàm sinh URL `buildPageUrl` và `buildAdLibraryUrlForStatus` tự động chuyển đổi các lựa chọn giao diện sang chữ thường bằng `.toLowerCase()`, đảm bảo tab kiểm định Page luôn mở đúng bộ lọc và hiển thị chính xác số ads tương ứng (~64 thay vì 110).
+- **Chống lỗi Active Ratio 50%**: Khi kiểm định `inactive` ads, nếu tab đang mở trang `active`, content script tuyệt đối không đọc DOM làm fallback mà trả về `0` (`INACTIVE_DEFAULT`), phản ánh đúng thực tế lưu trữ ads của Meta và đảm bảo tỷ lệ Active Ratio đạt chuẩn.
+- **Đồng bộ GraphQL API**: Truyền toàn diện cấu hình bộ lọc (`mediaType`, `publisherPlatform`, `startDateMin`, `country`) vào tất cả hàm truy vấn GraphQL ngầm (`readPageAdCountViaGraphQL`, `getAdDetailsViaGraphQL`, `extractAllAdsViaGraphQL`), giúp việc bóc tách ads creatives chỉ lấy đúng video ads khi người dùng chọn "Chỉ Video".
+
 ---
 
 ## 🏆 3. Kết Quả Thẩm Định Thực Tế Các Winner Store Phát Hiện Được
@@ -127,10 +139,11 @@ fb-ads-research-extension/
 ├── Code.gs                    # Mã nguồn Google Apps Script Webhook tiếp nhận dữ liệu ghi vào Google Sheets
 ├── TEST_PROMPT.md             # Kịch bản kiểm thử toàn diện đa tầng (Visual, DOM, API, Logfile, ECC)
 ├── README.md                  # Tài liệu hướng dẫn kỹ thuật & logic vận hành chi tiết
-├── .ecc/                      # Bộ công cụ kiểm thử tự động eval-harness.js (17/17 Passed)
+├── .ecc/                      # Bộ công cụ kiểm thử tự động eval-harness.js (29/29 Passed)
 ├── icons/                     # Bộ icon đại diện của tiện ích (16px, 48px, 128px)
 ├── reports/                   # Thư mục lưu trữ các báo cáo kiểm chuẩn chi tiết
-│   └── TEST_REPORT_CAR_10_KEYWORDS.md # Báo cáo kiểm định 10 từ khóa ngách Car (27 Winners, 74 Creatives)
+│   ├── TEST_REPORT_CAR_10_KEYWORDS.md # Báo cáo kiểm định 10 từ khóa ngách Car (27 Winners, 74 Creatives)
+│   └── TEST_REPORT_5MIN_CAMPAIGN.md   # Báo cáo chiến dịch chạy thử nghiệm đa ngách 5 phút
 └── scripts/                   # Bộ công cụ & kịch bản kiểm thử tự động độc lập
     ├── run_full_campaign_analysis.js  # Runner tự động hóa toàn diện 10 từ khóa
     ├── sync_active_inactive_sheet.js  # Đồng bộ chỉ số Active/Inactive lên Google Sheet
