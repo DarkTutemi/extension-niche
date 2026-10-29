@@ -5,7 +5,7 @@
  * Đã được đồng bộ và kiểm chứng trực tiếp trên DOM thực tế của Facebook Ads Library.
  */
 
-const SELECTORS = {
+var SELECTORS = (typeof globalThis !== 'undefined' && globalThis.SELECTORS) ? globalThis.SELECTORS : {
 
   // ── Facebook Ads Library – Trang kết quả theo keyword ──────────────
 
@@ -170,6 +170,11 @@ function decodeCtaUrl(rawUrl) {
   } catch (err) {
     return null;
   }
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.SELECTORS = SELECTORS;
+  globalThis.decodeCtaUrl = decodeCtaUrl;
 }
 
 if (typeof module !== 'undefined' && module.exports) {

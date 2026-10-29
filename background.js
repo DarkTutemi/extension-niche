@@ -265,14 +265,20 @@ async function sendMessageToTab(tabId, message, maxRetries = 5) {
  */
 async function injectContentScript(tabId, files) {
   try {
+    // 1. Kiểm tra xem content script đã nạp và sẵn sàng chưa
+    const ping = await chrome.tabs.sendMessage(tabId, { type: 'CHECK_READY' }).catch(() => null);
+    if (ping && ping.ok) {
+      // Content script đã tồn tại trong tab, không cần inject lại để chống lỗi SyntaxError
+      return;
+    }
     await chrome.scripting.executeScript({
       target: { tabId },
       files,
     });
   } catch (err) {
-    // Nếu đã inject rồi thì bỏ qua lỗi
-    if (!err.message.includes('Cannot access')) {
-      throw err;
+    // Nếu đã inject rồi hoặc không thể truy cập thì bỏ qua lỗi an toàn
+    if (!err.message || !err.message.includes('Cannot access')) {
+      console.debug(`[injectContentScript] Tab #${tabId} injection notice:`, err.message);
     }
   }
 }
@@ -813,14 +819,16 @@ async function processPage(pageIndex) {
       }
     }
 
-    // Nếu chưa có websiteUrl từ bước cào danh sách, trích xuất trực tiếp trên pageTab
-    if (!websiteUrl) {
+    // Nếu chưa có websiteUrl từ bước cào danh sách hoặc postUrl còn là link Ad Library, trích xuất trực tiếp trên pageTab
+    if (!websiteUrl || !postUrl || postUrl.includes('ads/library')) {
       const adDetails = await getAdDetailsFromTab(pageTab.id, page.pageId);
       if (adDetails && adDetails.websiteUrl) {
         websiteUrl = adDetails.websiteUrl;
         websiteUrlRaw = adDetails.websiteUrlRaw;
         rootDomain = adDetails.rootDomain;
-        if (adDetails.postUrl) postUrl = adDetails.postUrl;
+      }
+      if (adDetails && adDetails.postUrl && !adDetails.postUrl.includes('ads/library')) {
+        postUrl = adDetails.postUrl;
       }
     }
 
@@ -880,10 +888,17 @@ async function processPage(pageIndex) {
       if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
         state.pages[pageIndex].ads = adsRes.ads;
         // Cập nhật postUrl cho Page nếu tìm được link Reel / Story thực tế từ creative
-        const bestFbPost = adsRes.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'));
-        if (bestFbPost && bestFbPost.fbPostUrl) {
-          state.pages[pageIndex].postUrl = bestFbPost.fbPostUrl;
-          state.pages[pageIndex].fbPostUrl = bestFbPost.fbPostUrl;
+        const bestFbPost = adsRes.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'))
+                        || adsRes.ads.find(a => a.reelUrl || a.storyUrl)
+                        || adsRes.ads[0];
+        if (bestFbPost) {
+          const chosenPostUrl = (bestFbPost.fbPostUrl && !bestFbPost.fbPostUrl.includes('ads/library'))
+            ? bestFbPost.fbPostUrl
+            : (bestFbPost.reelUrl || bestFbPost.storyUrl || bestFbPost.fbPostUrl);
+          if (chosenPostUrl) {
+            state.pages[pageIndex].postUrl = chosenPostUrl;
+            state.pages[pageIndex].fbPostUrl = chosenPostUrl;
+          }
         }
         await saveState({ pages: state.pages });
         const videoCount = adsRes.ads.filter(a => a.mediaFormat === 'VIDEO' || a.reelUrl).length;
@@ -1350,6 +1365,16 @@ async function writeToSheet(pageIndex) {
     return;
   }
 
+  // Đảm bảo lấy link Reel / Post FB thực tế nhất thay vì link Thư viện quảng cáo
+  let bestPostLink = page.postUrl || '';
+  if ((!bestPostLink || bestPostLink.includes('ads/library')) && page.ads && page.ads.length > 0) {
+    const candidate = page.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'))
+                   || page.ads.find(a => a.reelUrl || a.storyUrl);
+    if (candidate) {
+      bestPostLink = candidate.fbPostUrl || candidate.reelUrl || candidate.storyUrl || bestPostLink;
+    }
+  }
+
   const payload = {
     secretKey,
     action: 'INSERT_OR_UPDATE',
@@ -1358,7 +1383,7 @@ async function writeToSheet(pageIndex) {
       keyword: page.keyword || '',
       pageId: page.pageId,
       pageName: page.pageName,
-      postUrl: page.postUrl || '',
+      postUrl: bestPostLink,
       websiteUrl: page.websiteUrl || '',
       activeCount: page.activeCount,
       inactiveCount: page.inactiveCount,
