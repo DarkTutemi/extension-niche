@@ -70,34 +70,34 @@ flowchart TD
    - Loại bỏ các shop lừa đảo, shop rác 1 sản phẩm (one-product burn store).
    - Chỉ giữ lại các thương hiệu E-Commerce thực sự có danh mục sản phẩm hoàn chỉnh.
 
-### 🔄 4. Nút "🔄 Reload Extension" 1-Click Tích Hợp Sẵn
-- Trong Chrome Manifest V3, Service Worker chạy ngầm trong RAM thường không tự cập nhật code mới từ ổ cứng nếu chưa được nạp lại.
-- Extension tích hợp sẵn nút **`🔄 Reload`** ở góc trên cùng bên phải giao diện Side Panel và Popup.
-- Khi bấm nút, tiện ích lập tức thực thi `chrome.runtime.reload()`, giải phóng bộ nhớ cũ và nạp lại code mới nhất chỉ trong **0.5 giây**.
+### 🔄 4. Nút "🔄 Reload Extension" & "🗑️ Xóa sạch dữ liệu Sheet" 1-Click
+- Trong Chrome Manifest V3, Service Worker chạy ngầm trong RAM thường không tự cập nhật code mới từ ổ cứng nếu chưa được nạp lại. Extension tích hợp sẵn nút **`🔄 Reload`** ở góc trên cùng bên phải giao diện Side Panel và Popup để thực thi `chrome.runtime.reload()` chỉ trong **0.5 giây**.
+- **Nút dọn dẹp dữ liệu**: Tích hợp nút **`🗑️ Xóa sạch dữ liệu Google Sheet`** ngay trong phần Cài đặt, gửi action `CLEAR_ALL` qua Google Apps Script để reset sạch các hàng dữ liệu cũ, sẵn sàng cho phiên nghiên cứu mới.
 
-### 🎬 5. Tinh Gọn Cấu Trúc Google Sheet & Loại Bỏ Dark Post Thừa Thãi
-- **Thực tế kỹ thuật**: Hầu hết quảng cáo E-commerce/Dropship hiện đại trên Meta là **Dark Post (bài post ẩn hoàn toàn khỏi Feed)** được tạo trực tiếp từ Ads Manager, không hiển thị tương tác công khai.
-- **Tối ưu hóa**: Đã xóa bỏ hoàn toàn cột `Link Post Ads` thừa thãi trên Google Sheets (`FB_Ads_Research` và `FB_Ads_Creatives`), loại bỏ các chuỗi fetch giải mã Story/Reel không cần thiết, giúp tốc độ trích xuất ads creatives và đẩy dữ liệu lên Google Sheet tăng gấp 3 lần, tiết kiệm tối đa tài nguyên và thời gian chạy.
+### 🎬 5. Cấu Trúc Google Sheet 14 Cột & Tái Sử Dụng Cột F Lưu Link iNote
+- **Cấu trúc 14 Cột chuẩn hóa**: `STT`, `Ngách`, `Keyword`, `Page ID`, `Tên Page`, `Link Post Ads`, `Link Website`, `Active Ads`, `Inactive Ads`, `Active Ratio` (định dạng `%` tại Cột 10), `Số sản phẩm`, `Nguồn đếm SP`, `Ngày kiểm tra`, `Trạng thái`.
+- **Cột F (`Link Post Ads`)**: Tái sử dụng để lưu trữ trực tiếp đường link **iNote** (`https://inote.net/<id>`) chứa toàn bộ chiến dịch đang hoạt động của Page, đồng bộ qua các trường alias (`postUrl`, `inoteUrl`, `linkPostAds`, `pageUrl`) đảm bảo tương thích 100% với Google Apps Script Webhook.
 
 ### 🎯 6. Chuẩn Hóa Tham Số Bộ Lọc URL & Kiểm Tra Inactive Ads Trung Thực
 - **Khắc phục lỗi rớt bộ lọc**: Facebook Ads Library URL router chỉ chấp nhận các giá trị tham số dạng chữ thường (`media_type=video`, `publisher_platforms[0]=facebook`). Các hàm sinh URL `buildPageUrl` và `buildAdLibraryUrlForStatus` tự động chuyển đổi các lựa chọn giao diện sang chữ thường bằng `.toLowerCase()`, đảm bảo tab kiểm định Page luôn mở đúng bộ lọc và hiển thị chính xác số ads tương ứng.
 - **Kiểm tra Inactive Ads thực tế**: Xóa bỏ hoàn toàn cơ chế fake số 0. Nếu tab đang mở `active`, extension tự động mở tab phụ kiểm tra URL `active_status=inactive`, đọc đúng số kết quả thực tế (như Viqzes.store: 91 active vs 3.200 inactive $\rightarrow$ tỷ lệ 2.8% $\rightarrow$ SKIP trung thực).
 - **Đồng bộ GraphQL API**: Truyền toàn diện cấu hình bộ lọc (`mediaType`, `publisherPlatform`, `startDateMin`, `country`) vào tất cả hàm truy vấn GraphQL ngầm (`readPageAdCountViaGraphQL`, `getAdDetailsViaGraphQL`, `extractAllAdsViaGraphQL`), giúp việc bóc tách ads creatives chỉ lấy đúng video ads khi người dùng chọn "Chỉ Video".
 
-### 📝 7. Tự Động Cào & Lưu Toàn Bộ Link Sản Phẩm Đích Lên iNote.net (Cổng 1)
+### 📝 7. Tự Động Cào Toàn Bộ Chiến Dịch & Lưu Link Raw Facebook Lên iNote.net (Cổng 1)
 - **Cơ chế kích hoạt**: Ngay khi Page vượt qua Cổng 1 (Active Ratio $\ge 70\%$), extension lập tức kích hoạt bộ trích xuất toàn bộ chiến dịch quảng cáo active của Page qua Meta GraphQL API.
-- **Trích xuất link sản phẩm đích (CTA Landing Pages)**: Tự động unwrap Facebook redirection (`l.facebook.com/l.php?u=...`), bóc tách link sản phẩm từ bài viết đơn và từng card của Carousel ads, loại bỏ hoàn toàn các thông số theo dõi (`utm_*`, `fbclid`, `_aem*`), và loại trùng lặp.
-- **Tạo trang note tự động trên `https://inote.net/`**: Gửi yêu cầu khởi tạo trang note riêng biệt cho từng Page và lưu trữ nội dung định dạng chuyên nghiệp:
+- **Phân trang lặp tự động (Cursor Pagination)**: Không dừng lại ở 50 ads mặc định, extension tự động lặp phân trang qua `page_info.end_cursor` & `has_next_page` để cào sạch 100% số chiến dịch thực tế (đã thẩm định cào thành công đủ 184 ads cho Page DallasWind US).
+- **Bảo toàn link raw chuyển hướng Facebook**: Giữ nguyên vẹn 100% định dạng `https://l.facebook.com/l.php?u=...` kèm toàn bộ tham số tracking (`fbclid`, `h`, `aem`) từ cụm thẻ `<a href="...">` của từng card quảng cáo.
+- **Tạo trang note tự động trên `https://inote.net/`**: Khởi tạo trang note riêng biệt cho từng Page và lưu trữ nội dung định dạng chuyên nghiệp:
   ```
   # Fanpage: <Tên Page> (ID: <Page ID>)
   # Thời gian cào: <Thời gian>
   # Tỷ lệ Active: <Tỷ lệ>% (Active: <Số Active>)
-  # Danh sách link sản phẩm chạy quảng cáo (<N> links):
+  # Danh sách link chiến dịch quảng cáo (<N> links):
   --------------------------------------------------
-  https://.../products/...
-  https://.../products/...
+  https://l.facebook.com/l.php?u=...
+  https://l.facebook.com/l.php?u=...
   ```
-- **Clickable Log Link**: Đường link trang note (dạng `https://inote.net/<randomId>`) được in trực tiếp ra bảng log Side Panel và Dashboard Logfile dưới dạng link liên kết bấm được (Clickable Hyperlink), đồng thời lưu trữ vào state phiên làm việc và đồng bộ lên Google Sheet.
+- **Clickable Log Link & Sheet Sync**: Đường link trang note (dạng `https://inote.net/<randomId>`) được in trực tiếp ra bảng log Side Panel và Dashboard Logfile dưới dạng link liên kết bấm được (Clickable Hyperlink), đồng thời ghi thẳng vào Cột F (`Link Post Ads`) trên Google Sheet.
 
 ---
 
@@ -211,6 +211,8 @@ node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
 
 1. Testing Result Count Parser (selectors.js & content_fb.js)
   ✓ Parses standard Vietnamese result count (~86 kết quả)
+  ✓ Parses exact 91 results from Vietnamese Facebook Ad Library (~91 kết quả)
+  ✓ Parses thousand dot separator (~3.200 kết quả for inactive ads)
   ✓ Parses thousand dot separator (~31.000 kết quả)
   ✓ Parses thousand comma separator (~1,250 results)
   ✓ Parses plain number without tilde (15 results)
@@ -227,16 +229,46 @@ node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
 3. Testing Active Ratio Evaluation & Gates
   ✓ Passes when active ratio exceeds threshold (10 active, 2 inactive >= 70%)
   ✓ Skips when active ratio is below threshold (3 active, 7 inactive < 70%)
+  ✓ Skips Viqzes.store accurately (91 active, 3200 inactive -> ratio 2.76% < 70%)
   ✓ Marks UNKNOWN when ad count read failed (null active)
   ✓ Marks ZERO when total is 0
 
 4. Testing Product Count Parsing & Evaluation
   ✓ Counts <url> tags in sitemap XML accurately
 
-5. Silent Failure Hunter Code Audit
+5. Testing Google Sheet Schema & Streamlined Payload
+  ✓ HEADERS in Code.gs contains 'Link Post Ads' at Column F
+  ✓ CREATIVE_HEADERS in Code.gs does not contain 'Link Post / Reel FB'
+  ✓ Active Ratio format is applied to Column 10 (Column J) in Code.gs
+  ✓ Row values has exact 14 columns (STT to Trạng thái)
+  ✓ Column 6 (index 5) is Link Post Ads (iNote URL)
+  ✓ Column 7 (index 6) is Link Website
+  ✓ Column 10 (index 9) is Active Ratio
+
+6. Silent Failure Hunter Code Audit
   ✓ Zero empty catch blocks found across codebase
 
+7. Testing Ad Library URL Builders & Filter Normalization
+  ✓ Normalizes mediaType from VIDEO to lowercase video in URL
+  ✓ Normalizes publisherPlatform from FACEBOOK to lowercase facebook in URL
+  ✓ Encodes startDateMin accurately in URL
+  ✓ Contains target view_all_page_id
+  ✓ Omits publisher_platforms when publisherPlatform is ALL
+  ✓ Sets media_type=all when mediaType is ALL
+
+8. Testing iNote Storage & Campaign Link Extraction
+  ✓ Inote content includes Page Name
+  ✓ Inote content includes Page ID
+  ✓ Inote content includes Active Ratio
+  ✓ Inote content header states exact total link count (3 links)
+  ✓ Inote content header states unique product count (2 link sản phẩm độc nhất)
+  ✓ Inote content includes first unique product URL
+  ✓ Inote content includes second unique product URL
+  ✓ Filters out facebook links and duplicates cleanly
+  ✓ Retains p1
+  ✓ Retains p2
+
 ----------------------------------------
-Evaluation Result: 17 Passed, 0 Failed
+Evaluation Result: 43 Passed, 0 Failed
 All ECC evaluation gates PASSED!
 ```

@@ -1,6 +1,7 @@
 # Logs
 *.log
 npm-debug.log*
+test_*_logs.json
 
 # OS Files
 .DS_Store

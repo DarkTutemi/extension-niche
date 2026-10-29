@@ -373,9 +373,11 @@ Khi phát hiện bất kỳ bài test nào bị **FAIL**:
 - [ ] Ngăn chặn triệt để bẫy đọc nhầm DOM active cho inactive gây tụt Active Ratio về 50.0% giả lập.
 - [ ] Đồng bộ toàn bộ cấu hình bộ lọc (`mediaType`, `publisherPlatform`, `startDateMin`) vào mọi truy vấn Meta GraphQL.
 - [ ] Hiển thị đầy đủ chuỗi URL không bị cắt ngắn trên bảng log khi mở tab.
-- [ ] Trích xuất 100% chính xác link **Reel & Story Facebook (`story.php?story_fbid=...&id=...`)** từ CDN URL và `storyID` Base64 để soi lượt like, comment, share.
-- [ ] Đồng bộ Cột F ở cả 2 bảng Google Sheet: Cột F của `FB_Ads_Research` và `FB_Ads_Creatives` hiển thị link bài post thực tế thay vì link thư viện.
+- [ ] Đồng bộ Cột F (`Link Post Ads`) trên Google Sheet hiển thị đường link **iNote (`https://inote.net/<id>`)** gom sạch toàn bộ chiến dịch đang hoạt động của Page.
+- [ ] Định dạng link chiến dịch trong iNote bảo toàn chuẩn `https://l.facebook.com/l.php?u=...` kèm toàn bộ tracking parameters nguyên bản (`fbclid`, `h`, `aem`).
+- [ ] Cơ chế lặp phân trang GraphQL qua `page_info.end_cursor` & `has_next_page` cào đủ 100% chiến dịch của Page (đã kiểm định cào đủ 184 ads cho DallasWind US).
+- [ ] Tích hợp nút **`🗑️ Xóa sạch dữ liệu Google Sheet`** (`CLEAR_ALL`) trực tiếp trong Cài đặt extension để reset sheet tiện lợi.
 - [ ] Tuyệt đối **không phát sinh SyntaxError** `Identifier has already been declared` khi nạp lại extension nhờ cơ chế ping `CHECK_READY` và `globalThis`.
 - [ ] Hàm `sleep(ms)` và `sleepRandom()` hoạt động trơn tru trong background, không phát sinh `sleep is not defined`.
-- [ ] Google Apps Script Webhook hoạt động ổn định với `SPREADSHEET_ID` chuẩn, không bị lỗi `getSheetByName`.
-- [ ] Bộ kiểm thử `.ecc/eval-harness.js` đạt điểm tuyệt đối **32/32 PASS**.
+- [ ] Google Apps Script Webhook hoạt động ổn định với `SPREADSHEET_ID` chuẩn, định dạng cột Active Ratio `%` tại Cột 10 chuẩn chỉ.
+- [ ] Bộ kiểm thử `.ecc/eval-harness.js` đạt điểm tuyệt đối **43/43 PASS**.
