@@ -84,6 +84,21 @@ flowchart TD
 - **Kiểm tra Inactive Ads thực tế**: Xóa bỏ hoàn toàn cơ chế fake số 0. Nếu tab đang mở `active`, extension tự động mở tab phụ kiểm tra URL `active_status=inactive`, đọc đúng số kết quả thực tế (như Viqzes.store: 91 active vs 3.200 inactive $\rightarrow$ tỷ lệ 2.8% $\rightarrow$ SKIP trung thực).
 - **Đồng bộ GraphQL API**: Truyền toàn diện cấu hình bộ lọc (`mediaType`, `publisherPlatform`, `startDateMin`, `country`) vào tất cả hàm truy vấn GraphQL ngầm (`readPageAdCountViaGraphQL`, `getAdDetailsViaGraphQL`, `extractAllAdsViaGraphQL`), giúp việc bóc tách ads creatives chỉ lấy đúng video ads khi người dùng chọn "Chỉ Video".
 
+### 📝 7. Tự Động Cào & Lưu Toàn Bộ Link Sản Phẩm Đích Lên iNote.net (Cổng 1)
+- **Cơ chế kích hoạt**: Ngay khi Page vượt qua Cổng 1 (Active Ratio $\ge 70\%$), extension lập tức kích hoạt bộ trích xuất toàn bộ chiến dịch quảng cáo active của Page qua Meta GraphQL API.
+- **Trích xuất link sản phẩm đích (CTA Landing Pages)**: Tự động unwrap Facebook redirection (`l.facebook.com/l.php?u=...`), bóc tách link sản phẩm từ bài viết đơn và từng card của Carousel ads, loại bỏ hoàn toàn các thông số theo dõi (`utm_*`, `fbclid`, `_aem*`), và loại trùng lặp.
+- **Tạo trang note tự động trên `https://inote.net/`**: Gửi yêu cầu khởi tạo trang note riêng biệt cho từng Page và lưu trữ nội dung định dạng chuyên nghiệp:
+  ```
+  # Fanpage: <Tên Page> (ID: <Page ID>)
+  # Thời gian cào: <Thời gian>
+  # Tỷ lệ Active: <Tỷ lệ>% (Active: <Số Active>)
+  # Danh sách link sản phẩm chạy quảng cáo (<N> links):
+  --------------------------------------------------
+  https://.../products/...
+  https://.../products/...
+  ```
+- **Clickable Log Link**: Đường link trang note (dạng `https://inote.net/<randomId>`) được in trực tiếp ra bảng log Side Panel và Dashboard Logfile dưới dạng link liên kết bấm được (Clickable Hyperlink), đồng thời lưu trữ vào state phiên làm việc và đồng bộ lên Google Sheet.
+
 ---
 
 ## 🏆 3. Kết Quả Thẩm Định Thực Tế Các Winner Store Phát Hiện Được
