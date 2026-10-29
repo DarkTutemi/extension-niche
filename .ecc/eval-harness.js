@@ -247,7 +247,7 @@ assert("Column 9 (index 8) is Active Ratio", mockRow[8], 1.0);
 // ----------------------------------------------------
 console.log(`\n${BOLD}6. Silent Failure Hunter Code Audit${RESET}`);
 
-const jsFiles = ['background.js', 'content_fb.js', 'content_web.js', 'popup.js', 'selectors.js'];
+const jsFiles = ['background.js', 'content_fb.js', 'content_web.js', 'popup.js', 'selectors.js', 'log.js'];
 
 let emptyCatchFound = 0;
 jsFiles.forEach(file => {
@@ -322,6 +322,69 @@ const testUrl2 = buildPageUrlTest('1875448039341460', 'active', {
 
 assert("Omits publisher_platforms when publisherPlatform is ALL", testUrl2.includes('publisher_platforms'), false);
 assert("Sets media_type=all when mediaType is ALL", testUrl2.includes('media_type=all'), true);
+
+// ----------------------------------------------------
+// Test Suite 8: iNote Storage & Campaign Link Extraction
+// ----------------------------------------------------
+console.log(`\n${BOLD}8. Testing iNote Storage & Campaign Link Extraction${RESET}`);
+
+globalThis.chrome = {
+  runtime: {
+    onMessage: { addListener: () => {} },
+    onInstalled: { addListener: () => {} },
+    onStartup: { addListener: () => {} }
+  },
+  storage: { local: { get: async () => ({}), set: async () => ({}) } },
+  tabs: { query: async () => [], create: async () => ({}), remove: async () => {} }
+};
+
+const { formatInoteContent } = require('../background.js');
+
+const samplePage = {
+  name: 'Timeless Skin Care',
+  id: '1875448039341460',
+  active: 110,
+  ratio: 1.0,
+  urls: [
+    'https://www.timelessha.com/products/20-vitamin-c-e-ferulic-acid-serum-1-oz',
+    'https://www.timelessha.com/products/hyaluronic-acid-serum-100-pure',
+    'https://www.timelessha.com/products/20-vitamin-c-e-ferulic-acid-serum-1-oz', // Duplicate
+    ''
+  ]
+};
+
+const inoteBody = formatInoteContent(
+  samplePage.name,
+  samplePage.id,
+  samplePage.active,
+  samplePage.ratio,
+  samplePage.urls,
+  '29/10/2026, 16:00:00'
+);
+
+assert("Inote content includes Page Name", inoteBody.includes('# Fanpage: Timeless Skin Care'), true);
+assert("Inote content includes Page ID", inoteBody.includes('ID: 1875448039341460'), true);
+assert("Inote content includes Active Ratio", inoteBody.includes('100.0%'), true);
+assert("Inote content header states exact unique link count (2 links)", inoteBody.includes('2 links'), true);
+assert("Inote content includes first unique product URL", inoteBody.includes('https://www.timelessha.com/products/20-vitamin-c-e-ferulic-acid-serum-1-oz'), true);
+assert("Inote content includes second unique product URL", inoteBody.includes('https://www.timelessha.com/products/hyaluronic-acid-serum-100-pure'), true);
+
+// Verify duplicate filtering in product URL set
+const duplicateUrls = [
+  'https://brand.com/p1',
+  'https://brand.com/p2',
+  'https://brand.com/p1',
+  'https://www.facebook.com/ad/123',
+  'https://l.facebook.com/l.php?u=...',
+  null,
+  ''
+];
+const filteredUrls = Array.from(new Set(
+  duplicateUrls.filter(u => u && !u.includes('facebook.com') && !u.includes('fb.com'))
+));
+assert("Filters out facebook links and duplicates cleanly", filteredUrls.length, 2);
+assert("Retains p1", filteredUrls.includes('https://brand.com/p1'), true);
+assert("Retains p2", filteredUrls.includes('https://brand.com/p2'), true);
 
 // ----------------------------------------------------
 // Summary

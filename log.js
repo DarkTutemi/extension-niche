@@ -79,6 +79,31 @@ function updateStateUI(state) {
   }
 }
 
+function renderLogMessageNodes(container, text) {
+  if (!text) return;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  let lastIdx = 0;
+  let match;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      container.appendChild(document.createTextNode(text.substring(lastIdx, match.index)));
+    }
+    const a = document.createElement('a');
+    a.href = match[0];
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = match[0];
+    a.style.color = '#818cf8';
+    a.style.textDecoration = 'underline';
+    a.style.wordBreak = 'break-all';
+    container.appendChild(a);
+    lastIdx = urlRegex.lastIndex;
+  }
+  if (lastIdx < text.length) {
+    container.appendChild(document.createTextNode(text.substring(lastIdx)));
+  }
+}
+
 // Lọc và hiển thị danh sách log
 function renderLogs() {
   const selectedLevel = elLevelFilter.value;
@@ -140,7 +165,7 @@ function renderLogs() {
 
     const msgSpan = document.createElement('span');
     msgSpan.className = 'log-msg';
-    msgSpan.textContent = entry.message || '';
+    renderLogMessageNodes(msgSpan, entry.message || '');
 
     div.appendChild(timeSpan);
     div.appendChild(badgeSpan);

@@ -772,7 +772,31 @@ async function extractAllAdsViaGraphQL(pageId, limit = 50, config = {}) {
       seenAdIds.add(adId);
 
       const snap = item.snapshot || {};
-      const rawCta = snap.link_url || snap.caption || '';
+      let rawCta = snap.link_url || snap.caption || '';
+
+      // Thu thập các link con nếu là Carousel cards
+      const cardUrls = [];
+      if (Array.isArray(snap.cards)) {
+        for (const card of snap.cards) {
+          const cardRaw = card.link_url || card.caption || '';
+          if (cardRaw) {
+            let cardClean = cardRaw;
+            if (typeof decodeCtaUrl === 'function') {
+              const dec = decodeCtaUrl(cardRaw);
+              if (dec && dec.websiteUrl) cardClean = dec.websiteUrl;
+            }
+            if (cardClean && !cardUrls.includes(cardClean)) {
+              cardUrls.push(cardClean);
+            }
+          }
+        }
+      }
+
+      // Nếu rawCta rỗng mà có cardUrls thì lấy link đầu tiên của card
+      if (!rawCta && cardUrls.length > 0) {
+        rawCta = cardUrls[0];
+      }
+
       let cleanUrl = rawCta;
       if (rawCta && typeof decodeCtaUrl === 'function') {
         const dec = decodeCtaUrl(rawCta);
@@ -799,6 +823,7 @@ async function extractAllAdsViaGraphQL(pageId, limit = 50, config = {}) {
         adId: adId,
         adLibraryUrl: `https://www.facebook.com/ads/library/?id=${adId}`,
         destinationUrl: cleanUrl,
+        cardUrls: cardUrls,
         rawUrl: rawCta,
         mediaFormat: mediaFormat,
         ctaText: ctaText,

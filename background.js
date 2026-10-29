@@ -12,7 +12,9 @@
  *   Mỗi bước đều saveState(). Stop/CAPTCHA → PAUSED, Resume tiếp.
  */
 
-importScripts('selectors.js');
+if (typeof importScripts === 'function') {
+  importScripts('selectors.js');
+}
 
 // ═══════════════════════════════════════════════════════════════════
 //  CONSTANTS
@@ -398,7 +400,7 @@ function stopKeepalive() {
   chrome.alarms.clear(KEEPALIVE_ALARM);
 }
 
-chrome.alarms.onAlarm.addListener(async (alarm) => {
+chrome?.alarms?.onAlarm?.addListener(async (alarm) => {
   if (alarm.name === KEEPALIVE_ALARM) {
     // Kiểm tra xem research còn đang chạy không
     const state = await loadState();
@@ -722,6 +724,73 @@ async function getAdDetailsFromTab(tabId, pageId, config = {}) {
 }
 
 /**
+ * Định dạng nội dung text danh sách link camp đẩy lên inote.net
+ * @param {string} pageName 
+ * @param {string|number} pageId 
+ * @param {number} activeCount 
+ * @param {number} ratio 
+ * @param {string[]} productUrls 
+ * @param {string} [timeStr]
+ * @returns {string}
+ */
+function formatInoteContent(pageName, pageId, activeCount, ratio, productUrls = [], timeStr) {
+  const uniqueUrls = Array.from(new Set(productUrls.filter(Boolean)));
+  const dateStr = timeStr || new Date().toLocaleString('vi-VN');
+  const headerLines = [
+    `# Fanpage: ${pageName} (ID: ${pageId})`,
+    `# Thời gian cào: ${dateStr}`,
+    `# Tỷ lệ Active: ${(ratio * 100).toFixed(1)}% (Active: ${activeCount})`,
+    `# Danh sách link sản phẩm chạy quảng cáo (${uniqueUrls.length} links):`,
+    '--------------------------------------------------',
+    ''
+  ];
+  return headerLines.concat(uniqueUrls).join('\n');
+}
+
+/**
+ * Tự động tạo note trên inote.net và lưu danh sách link sản phẩm chạy quảng cáo
+ * @param {string} pageName 
+ * @param {string|number} pageId 
+ * @param {number} activeCount 
+ * @param {number} ratio 
+ * @param {string[]} productUrls 
+ * @returns {Promise<{ ok: boolean, noteUrl?: string, totalLinks?: number, error?: string }>}
+ */
+async function uploadToInote(pageName, pageId, activeCount, ratio, productUrls = []) {
+  try {
+    const initRes = await fetch('https://inote.net/');
+    let noteUrl = initRes.url;
+    if (!noteUrl || noteUrl === 'https://inote.net/' || noteUrl === 'https://inote.net') {
+      const loc = initRes.headers.get('location');
+      if (loc) noteUrl = loc;
+    }
+    if (!noteUrl || !noteUrl.startsWith('https://inote.net/')) {
+      throw new Error('Không lấy được URL note mới từ inote.net');
+    }
+
+    const uniqueUrls = Array.from(new Set(productUrls.filter(Boolean)));
+    const bodyText = formatInoteContent(pageName, pageId, activeCount, ratio, uniqueUrls);
+
+    const postRes = await fetch(noteUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+      },
+      body: 'text=' + encodeURIComponent(bodyText)
+    });
+
+    if (!postRes.ok) {
+      throw new Error(`POST inote thất bại: HTTP ${postRes.status}`);
+    }
+
+    return { ok: true, noteUrl, totalLinks: uniqueUrls.length };
+  } catch (err) {
+    console.debug('[uploadToInote] error:', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
  * Xử lý 1 Page tại vị trí pageIndex trong mảng pages
  * Quy trình quản lý Tab nghiêm ngặt theo yêu cầu của ông chủ:
  * 1. Mở tab mới lọc theo Page, giữ tab này.
@@ -817,8 +886,55 @@ async function processPage(pageIndex) {
       return;
     }
 
-    // ĐẠT CỔNG 1: GIỮ TAB ĐỂ LÀM TIẾP CÔNG ĐOẠN CHECK WEBSITE!
+    // ĐẠT CỔNG 1: GIỮ TAB ĐỂ LÀM TIẾP CÔNG ĐOẠN CHECK WEBSITE & LƯU iNote!
     await addLog(`✓ ${page.pageName}: active=${ac}, inactive=${ic}, ratio=${(ratio * 100).toFixed(1)}% → ĐẠT CHUẨN CỔNG 1 (PASS)`, 'PASS');
+
+    // ── BƯỚC 2.5: Cào toàn bộ link chiến dịch & lưu vào iNote.net khi tỷ lệ Active >= 70% ──
+    try {
+      await addLog(`📑 Đang cào toàn bộ link chiến dịch của [${page.pageName}] để lưu iNote...`, 'INFO');
+      const adsRes = await sendMessageToTab(pageTab.id, {
+        type: 'GET_ALL_PAGE_ADS',
+        payload: { pageId: page.pageId, limit: 50, config: pageConfig }
+      }, 2);
+      if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
+        state.pages[pageIndex].ads = adsRes.ads;
+        await saveState({ pages: state.pages });
+
+        // Trích xuất link sản phẩm đích (CTA URL), loại trừ link Facebook nội bộ
+        const productUrlSet = new Set();
+        for (const ad of adsRes.ads) {
+          if (ad.destinationUrl && !ad.destinationUrl.includes('facebook.com') && !ad.destinationUrl.includes('fb.com')) {
+            productUrlSet.add(ad.destinationUrl);
+          }
+          if (Array.isArray(ad.cardUrls)) {
+            for (const cUrl of ad.cardUrls) {
+              if (cUrl && !cUrl.includes('facebook.com') && !cUrl.includes('fb.com')) {
+                productUrlSet.add(cUrl);
+              }
+            }
+          }
+        }
+        const productUrls = Array.from(productUrlSet);
+
+        if (productUrls.length > 0) {
+          await addLog(`📝 Đang tạo trang iNote cho [${page.pageName}] (${productUrls.length} link sản phẩm đích)...`, 'INFO');
+          const inoteRes = await uploadToInote(page.pageName, page.pageId, ac, ratio, productUrls);
+          if (inoteRes && inoteRes.ok) {
+            state.pages[pageIndex].inoteUrl = inoteRes.noteUrl;
+            await saveState({ pages: state.pages });
+            await addLog(`📝 [${page.pageName}]: Đã cào ${productUrls.length} link sản phẩm đích vào iNote: ${inoteRes.noteUrl}`, 'SAVED');
+          } else {
+            await addLog(`⚠️ [${page.pageName}]: Lưu iNote thất bại: ${inoteRes?.error || 'Lỗi không xác định'}`, 'WARN');
+          }
+        } else {
+          await addLog(`ℹ️ [${page.pageName}]: Không tìm thấy link CTA sản phẩm đích trong các ads để lưu iNote`, 'INFO');
+        }
+      }
+    } catch (inoteErr) {
+      console.debug('[Background] Inote crawl error:', inoteErr.message);
+      await addLog(`⚠️ [${page.pageName}]: Lỗi cào link lưu iNote: ${inoteErr.message}`, 'WARN');
+    }
+
     await addLog(`📌 GIỮ NGUYÊN tab #${pageTab.id} [${page.pageName}] để thực hiện công đoạn tiếp theo: Nhấp vào link quảng cáo & kiểm tra website...`, 'INFO');
 
     // ── BƯỚC 3: Nhấp vào link quảng cáo & kiểm tra website (Cổng 2) ──
@@ -836,7 +952,22 @@ async function processPage(pageIndex) {
       }
     }
 
-    // Nếu chưa có websiteUrl từ bước cào danh sách, trích xuất trực tiếp trên pageTab
+    // Nếu chưa có websiteUrl từ bước cào danh sách, tận dụng link ads vừa cào được
+    if (!websiteUrl && Array.isArray(state.pages[pageIndex].ads)) {
+      for (const ad of state.pages[pageIndex].ads) {
+        if (ad.destinationUrl && !ad.destinationUrl.includes('facebook.com')) {
+          const decoded = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(ad.destinationUrl) : null;
+          if (decoded && decoded.websiteUrl) {
+            websiteUrl = decoded.websiteUrl;
+            websiteUrlRaw = decoded.websiteUrlRaw || websiteUrl;
+            rootDomain = decoded.rootDomain || rootDomain;
+            break;
+          }
+        }
+      }
+    }
+
+    // Nếu vẫn chưa có websiteUrl, trích xuất trực tiếp trên pageTab
     if (!websiteUrl) {
       const adDetails = await getAdDetailsFromTab(pageTab.id, page.pageId, pageConfig);
       if (adDetails && adDetails.websiteUrl) {
@@ -889,23 +1020,28 @@ async function processPage(pageIndex) {
     state.pages[pageIndex].status = 'PASS';
     await saveState({ pages: state.pages });
     await addLog(`✅ ${page.pageName}: ${productResult.count} sản phẩm (${productResult.source}) → ĐẠT CHUẨN CỔNG 2 (WINNER STORE 🏆)`, 'PASS');
-    await addLog(`📌 TIẾP TỤC GIỮ TAB #${pageTab.id} [${page.pageName}] để crawl toàn bộ link quảng cáo kèm CTA qua API...`, 'INFO');
 
-    // ── BƯỚC 4: Crawl toàn bộ link quảng cáo kèm CTA của Page đó & upload lên Google Sheet ──
-    await addLog(`🎬 Đang crawl toàn bộ quảng cáo kèm CTA của Page [${page.pageName}] qua API trên tab #${pageTab.id}...`, 'INFO');
-    try {
-      const adsRes = await sendMessageToTab(pageTab.id, {
-        type: 'GET_ALL_PAGE_ADS',
-        payload: { pageId: page.pageId, limit: 50, config: pageConfig }
-      }, 2);
-      if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
-        state.pages[pageIndex].ads = adsRes.ads;
-        await saveState({ pages: state.pages });
-        const videoCount = adsRes.ads.filter(a => a.mediaFormat === 'VIDEO').length;
-        await addLog(`📦 Đã bóc tách thành công ${adsRes.ads.length} ads creative (${videoCount} Video, ${adsRes.ads.length - videoCount} Images/Carousels) cho [${page.pageName}]`, 'INFO');
+    // ── BƯỚC 4: Upload dữ liệu & Ads Creatives lên Google Sheet ──
+    if (!state.pages[pageIndex].ads || state.pages[pageIndex].ads.length === 0) {
+      await addLog(`🎬 Đang crawl toàn bộ quảng cáo kèm CTA của Page [${page.pageName}] qua API trên tab #${pageTab.id}...`, 'INFO');
+      try {
+        const adsRes = await sendMessageToTab(pageTab.id, {
+          type: 'GET_ALL_PAGE_ADS',
+          payload: { pageId: page.pageId, limit: 50, config: pageConfig }
+        }, 2);
+        if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
+          state.pages[pageIndex].ads = adsRes.ads;
+          await saveState({ pages: state.pages });
+        }
+      } catch (adsErr) {
+        console.debug('[Background] extractAllPageAds error:', adsErr.message);
       }
-    } catch (adsErr) {
-      console.debug('[Background] extractAllPageAds error:', adsErr.message);
+    }
+
+    if (Array.isArray(state.pages[pageIndex].ads) && state.pages[pageIndex].ads.length > 0) {
+      const allAds = state.pages[pageIndex].ads;
+      const videoCount = allAds.filter(a => a.mediaFormat === 'VIDEO').length;
+      await addLog(`📦 Đã bóc tách thành công ${allAds.length} ads creative (${videoCount} Video, ${allAds.length - videoCount} Images/Carousels) cho [${page.pageName}]`, 'INFO');
     }
 
     // Upload lên Google Sheet
@@ -1377,6 +1513,7 @@ async function writeToSheet(pageIndex) {
       activeRatio: page.activeRatio,
       productCount: page.productCount,
       productSource: page.productSource || '',
+      inoteUrl: page.inoteUrl || '',
       checkedAt: new Date().toLocaleString('vi-VN'),
       status: page.status || 'PASS',
       ads: page.ads || []
@@ -1616,3 +1753,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true; // Giữ sendResponse channel mở cho async
 });
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    formatInoteContent,
+    uploadToInote,
+    buildKeywordUrl,
+    buildPageUrl
+  };
+}
