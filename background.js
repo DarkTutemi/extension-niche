@@ -710,10 +710,6 @@ async function getAdDetailsFromTab(tabId, pageId, config = {}) {
     }, 2);
     if (resp && resp.ok) {
       return {
-        postUrl: resp.fbPostUrl || resp.postUrl || null,
-        fbPostUrl: resp.fbPostUrl || null,
-        reelUrl: resp.reelUrl || null,
-        storyUrl: resp.storyUrl || null,
         websiteUrl: resp.websiteUrl || null,
         websiteUrlRaw: resp.websiteUrlRaw || null,
         rootDomain: resp.rootDomain || null,
@@ -826,9 +822,8 @@ async function processPage(pageIndex) {
     await addLog(`📌 GIỮ NGUYÊN tab #${pageTab.id} [${page.pageName}] để thực hiện công đoạn tiếp theo: Nhấp vào link quảng cáo & kiểm tra website...`, 'INFO');
 
     // ── BƯỚC 3: Nhấp vào link quảng cáo & kiểm tra website (Cổng 2) ──
-    await addLog(`🔗 Đang nhấp/trích xuất link quảng cáo trên tab #${pageTab.id} [${page.pageName}]...`, 'INFO');
+    await addLog(`🔗 Đang trích xuất website đích từ quảng cáo trên tab #${pageTab.id} [${page.pageName}]...`, 'INFO');
     let websiteUrl = page.websiteUrl || null;
-    let postUrl = page.postUrl || (page.sampleAdArchiveId ? `https://www.facebook.com/ads/library/?id=${page.sampleAdArchiveId}` : null);
     let websiteUrlRaw = page.websiteUrlRaw || page.websiteUrl || null;
     let rootDomain = page.rootDomain || null;
 
@@ -841,21 +836,17 @@ async function processPage(pageIndex) {
       }
     }
 
-    // Nếu chưa có websiteUrl từ bước cào danh sách hoặc postUrl còn là link Ad Library, trích xuất trực tiếp trên pageTab
-    if (!websiteUrl || !postUrl || postUrl.includes('ads/library')) {
+    // Nếu chưa có websiteUrl từ bước cào danh sách, trích xuất trực tiếp trên pageTab
+    if (!websiteUrl) {
       const adDetails = await getAdDetailsFromTab(pageTab.id, page.pageId, pageConfig);
       if (adDetails && adDetails.websiteUrl) {
         websiteUrl = adDetails.websiteUrl;
         websiteUrlRaw = adDetails.websiteUrlRaw;
         rootDomain = adDetails.rootDomain;
       }
-      if (adDetails && adDetails.postUrl && !adDetails.postUrl.includes('ads/library')) {
-        postUrl = adDetails.postUrl;
-      }
     }
 
     state = await loadState();
-    state.pages[pageIndex].postUrl       = postUrl;
     state.pages[pageIndex].websiteUrl    = websiteUrl;
     state.pages[pageIndex].websiteUrlRaw = websiteUrlRaw;
     state.pages[pageIndex].rootDomain    = rootDomain;
@@ -909,22 +900,9 @@ async function processPage(pageIndex) {
       }, 2);
       if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
         state.pages[pageIndex].ads = adsRes.ads;
-        // Cập nhật postUrl cho Page nếu tìm được link Reel / Story thực tế từ creative
-        const bestFbPost = adsRes.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'))
-                        || adsRes.ads.find(a => a.reelUrl || a.storyUrl)
-                        || adsRes.ads[0];
-        if (bestFbPost) {
-          const chosenPostUrl = (bestFbPost.fbPostUrl && !bestFbPost.fbPostUrl.includes('ads/library'))
-            ? bestFbPost.fbPostUrl
-            : (bestFbPost.reelUrl || bestFbPost.storyUrl || bestFbPost.fbPostUrl);
-          if (chosenPostUrl) {
-            state.pages[pageIndex].postUrl = chosenPostUrl;
-            state.pages[pageIndex].fbPostUrl = chosenPostUrl;
-          }
-        }
         await saveState({ pages: state.pages });
-        const videoCount = adsRes.ads.filter(a => a.mediaFormat === 'VIDEO' || a.reelUrl).length;
-        await addLog(`📦 Đã bóc tách thành công ${adsRes.ads.length} ads creative (${videoCount} Video/Reel links, ${adsRes.ads.length - videoCount} Images/Carousels) cho [${page.pageName}]`, 'INFO');
+        const videoCount = adsRes.ads.filter(a => a.mediaFormat === 'VIDEO').length;
+        await addLog(`📦 Đã bóc tách thành công ${adsRes.ads.length} ads creative (${videoCount} Video, ${adsRes.ads.length - videoCount} Images/Carousels) cho [${page.pageName}]`, 'INFO');
       }
     } catch (adsErr) {
       console.debug('[Background] extractAllPageAds error:', adsErr.message);
@@ -1058,10 +1036,10 @@ async function readAdCount(pageId, status, country, config = {}) {
 }
 
 /**
- * Lấy link bài post ads và website đích từ quảng cáo đầu tiên của Page
+ * Lấy website đích từ quảng cáo đầu tiên của Page
  * @param {string} pageId
  * @param {object} config
- * @returns {Promise<{postUrl: string|null, websiteUrl: string|null, websiteUrlRaw: string|null, rootDomain: string|null}>}
+ * @returns {Promise<{websiteUrl: string|null, websiteUrlRaw: string|null, rootDomain: string|null}>}
  */
 async function getAdDetails(pageId, config) {
   // Ưu tiên 1: Zero-Tab GraphQL qua Facebook tab đang mở sẵn
@@ -1074,7 +1052,6 @@ async function getAdDetails(pageId, config) {
       });
       if (resp && resp.ok && resp.websiteUrl) {
         return {
-          postUrl: resp.postUrl || null,
           websiteUrl: resp.websiteUrl || null,
           websiteUrlRaw: resp.websiteUrlRaw || null,
           rootDomain: resp.rootDomain || null,
@@ -1105,21 +1082,17 @@ async function getAdDetails(pageId, config) {
 
     if (resp && resp.ok) {
       return {
-        postUrl: resp.fbPostUrl || resp.postUrl || null,
-        fbPostUrl: resp.fbPostUrl || null,
-        reelUrl: resp.reelUrl || null,
-        storyUrl: resp.storyUrl || null,
         websiteUrl: resp.websiteUrl || null,
         websiteUrlRaw: resp.websiteUrlRaw || null,
         rootDomain: resp.rootDomain || null,
       };
     }
 
-    return { postUrl: null, websiteUrl: null, websiteUrlRaw: null, rootDomain: null };
+    return { websiteUrl: null, websiteUrlRaw: null, rootDomain: null };
 
   } catch (err) {
     console.warn(`getAdDetails(${pageId}) thất bại:`, err.message);
-    return { postUrl: null, websiteUrl: null, websiteUrlRaw: null, rootDomain: null };
+    return { websiteUrl: null, websiteUrlRaw: null, rootDomain: null };
   } finally {
     if (tab) await closeExtensionTab(tab.id);
     const state = await loadState();
@@ -1388,21 +1361,6 @@ async function writeToSheet(pageIndex) {
     return;
   }
 
-  // Đảm bảo lấy link Story / Reel / Post FB thực tế nhất thay vì link Thư viện quảng cáo
-  let bestPostLink = page.postUrl || '';
-  let bestEngagement = page.engagement || null;
-  if ((!bestPostLink || bestPostLink.includes('ads/library')) && page.ads && page.ads.length > 0) {
-    const candidate = page.ads.find(a => a.storyUrl)
-                   || page.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'))
-                   || page.ads.find(a => a.reelUrl);
-    if (candidate) {
-      bestPostLink = candidate.storyUrl || candidate.fbPostUrl || candidate.reelUrl || bestPostLink;
-      if (candidate.engagement) {
-        bestEngagement = candidate.engagement;
-      }
-    }
-  }
-
   const payload = {
     secretKey,
     action: 'INSERT_OR_UPDATE',
@@ -1411,11 +1369,6 @@ async function writeToSheet(pageIndex) {
       keyword: page.keyword || '',
       pageId: page.pageId,
       pageName: page.pageName,
-      postUrl: bestPostLink,
-      reactions: bestEngagement?.reactions || '',
-      comments: bestEngagement?.comments || '',
-      shares: bestEngagement?.shares || '',
-      views: bestEngagement?.views || '',
       websiteUrl: page.websiteUrl || '',
       activeCount: page.activeCount,
       inactiveCount: page.inactiveCount,

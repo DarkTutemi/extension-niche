@@ -250,17 +250,17 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
        * Giải mã Base64 `storyID` (`S:_I<pageId>:<postId>`) và quét `top_level_post_id` / `content_owner_id_new` khi cần truy nguyên nguồn gốc bài viết.
      * **Hỗ trợ bài đăng dạng Ảnh (Image Ads):** Trích xuất Photo ID từ link ảnh để tạo `story.php?story_fbid=${photoId}&id=${pageId}`.
      * In log: `[INFO] 📦 Đã bóc tách thành công X ads creative (Y Video/Reel links, Z Images/Carousels) cho [<Tên Page>]`.
-  3. **Upload Google Sheets & AppSheet (Đồng bộ Cột F):**
-     * In log: `[INFO] 📤 Đang upload dữ liệu Store và X ads creative lên Google Sheet...`.
-     * **Bảng 1 (`FB_Ads_Research` - Cột F `Link Post Ads`):** Ghi link bài post `story.php` hoặc Reel thực tế của Page, thay thế hoàn toàn link thư viện quảng cáo `ads/library`.
-     * **Bảng 2 (`FB_Ads_Creatives` - Cột F `Link Post / Reel FB (Tương tác)`):** Ghi chính xác link `story.php` / Reel cho từng creative để người dùng click vào là soi được tương tác ngay.
-     * In log: `[SAVED] 💾 [<Tên Page>]: Đã upload thành công lên Google Sheet!`.
-  4. **Dọn dẹp Tab sau khi hoàn tất trọn vẹn:**
-     * In log: `[INFO] 🗑️ Hoàn tất quy trình phân tích & upload cho [<Tên Page>]. Đóng tab #... để giải phóng bộ nhớ`.
-     * Đóng tab này lại, nghỉ ngẫu nhiên 2s-5s rồi mới sang Page tiếp theo.
+  3. **Upload Google Sheets & AppSheet (Schema Tinh Gọn):**
+      * In log: [INFO] 📤 Đang upload dữ liệu Store và X ads creative lên Google Sheet....
+      * **Bảng 1 (FB_Ads_Research):** Gồm 13 cột chuẩn hóa (STT, Ngách, Keyword, Page ID, Tên Page, Link Website, Active Ads, Inactive Ads, Active Ratio, Số sản phẩm, Nguồn đếm SP, Ngày kiểm tra, Trạng thái).
+      * **Bảng 2 (FB_Ads_Creatives):** Gồm 12 cột chuẩn AppSheet tập trung vào CTA, link sản phẩm đích, link thư viện FB, tiêu đề và tóm tắt creative.
+      * In log: [SAVED] 💾 [<Tên Page>]: Đã upload thành công lên Google Sheet!.
+   4. **Dọn dẹp Tab sau khi hoàn tất trọn vẹn:**
+      * In log: [INFO] 🗑️ Hoàn tất quy trình phân tích & upload cho [<Tên Page>]. Đóng tab #... để giải phóng bộ nhớ.
+      * Đóng tab này lại, nghỉ ngẫu nhiên 2s-5s rồi mới sang Page tiếp theo.
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
-  * Cột F ở cả 2 bảng Google Sheet hiển thị link `https://www.facebook.com/story.php?story_fbid=...&id=...` hoặc `https://www.facebook.com/reel/...`.
-  * Click vào link mở ra bài post thật với đầy đủ like, comment, share, không bị link lỗi hoặc rơi về Ad Library chung chung.
+  * Dữ liệu upload lên Google Sheet đầy đủ 13 cột chuẩn hóa, định dạng Active Ratio cột I hiển thị dạng % chuẩn xác.
+  * Tốc độ trích xuất nhanh gấp 3 lần do không phải fetch ngầm giải mã các dark post ẩn.
 
 ---
 

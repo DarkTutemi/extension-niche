@@ -33,7 +33,6 @@ const HEADERS = [
   'Keyword',
   'Page ID',
   'Tên Page',
-  'Link Post Ads',
   'Link Website',
   'Active Ads',
   'Inactive Ads',
@@ -51,7 +50,6 @@ const CREATIVE_HEADERS = [
   'Tên Page',
   'Ad ID',
   'Dạng bài (Media)',
-  'Link Post / Reel FB (Tương tác)',
   'Nút CTA',
   'Loại CTA',
   'Link Sản Phẩm (Ads URL)',
@@ -102,7 +100,6 @@ function testDirectWrite() {
     'dog calming bed',
     '104376421493890',
     'Muddy Mat (Test Kết Nối)',
-    'https://www.facebook.com/ads/library/?id=104376421493890',
     'https://muddymats.com',
     22,
     1,
@@ -113,7 +110,7 @@ function testDirectWrite() {
     'PASS'
   ];
   sheet.appendRow(testRow);
-  sheet.getRange(sheet.getLastRow(), 10).setNumberFormat('0.0%');
+  sheet.getRange(sheet.getLastRow(), 9).setNumberFormat('0.0%');
   Logger.log('✅ THÀNH CÔNG: Đã ghi thử 1 dòng vào Sheet: ' + ss.getName());
 }
 
@@ -250,7 +247,6 @@ function doPost(e) {
     const inactiveVal = data.inactiveCount != null ? data.inactiveCount : (data.inactiveAds != null ? data.inactiveAds : 0);
     const productVal = data.productCount != null ? data.productCount : (data.productsCount != null ? data.productsCount : 0);
     const sourceVal = data.productSource || (data.isShopify ? 'Shopify JSON' : 'Sitemap') || 'N/A';
-    const postLink = data.postUrl || data.pageUrl || '';
 
     const rowValues = [
       stt,                                     // STT
@@ -258,7 +254,6 @@ function doPost(e) {
       data.keyword || '',                      // Keyword
       "'" + String(data.pageId),               // Page ID (dạng text chống mất số 0)
       data.pageName || '',                     // Tên Page
-      postLink,                                // Link Post Ads
       data.websiteUrl || '',                   // Link Website
       activeVal,                               // Active Ads
       inactiveVal,                             // Inactive Ads
@@ -282,8 +277,8 @@ function doPost(e) {
     }
 
     // 8. Định dạng số hiển thị cho dòng vừa ghi
-    // Cột J (cột 10) = Active Ratio định dạng %
-    sheet.getRange(existingRowIndex, 10).setNumberFormat('0.0%');
+    // Cột I (cột 9) = Active Ratio định dạng %
+    sheet.getRange(existingRowIndex, 9).setNumberFormat('0.0%');
 
     // 9. Xử lý ghi chi tiết toàn bộ Ads Creatives vào tab FB_Ads_Creatives (chuẩn AppSheet)
     let creativesCount = 0;
@@ -312,14 +307,12 @@ function doPost(e) {
         if (!adIdStr) continue;
 
         const existingRow = existingAdMap.get(adIdStr);
-        const fbPostLink = ad.fbPostUrl || ad.reelUrl || ad.storyUrl || '';
         const rowData = [
           existingRow || (cLastRow + newRows.length + 1),
           "'" + String(data.pageId),
           data.pageName || '',
           "'" + adIdStr,
           ad.mediaFormat || (ad.videos?.length ? 'VIDEO' : 'IMAGE'), // VIDEO / IMAGE / CAROUSEL
-          fbPostLink,                                                // Link Post / Reel FB (Tương tác, Like, Comment)
           ad.ctaText || 'Mua ngay',                                  // Nút CTA: Mua ngay, Đăng ký...
           ad.ctaType || 'SHOP_NOW',                                  // Mã CTA: SHOP_NOW, SIGN_UP...
           ad.destinationUrl || ad.linkUrl || '',                     // Link sản phẩm (Ads URL)

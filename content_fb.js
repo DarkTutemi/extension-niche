@@ -338,7 +338,6 @@ async function extractFirstAdDetails() {
   const cards = Array.from(document.querySelectorAll('div[class*="x1plvlek"], div[class*="x1cy8zhl"]'));
   const firstCard = cards.find(c => c.querySelectorAll('*').length > 15) || cards[0];
 
-  let postUrl = null;
   let rawCtaUrl = null;
 
   if (firstCard) {
@@ -347,14 +346,6 @@ async function extractFirstAdDetails() {
     if (ctaLink) {
       rawCtaUrl = ctaLink.href;
     }
-
-    // Trích xuất link bài post gốc / Reel trên Facebook hoặc ID thư viện
-    const domPostUrl = extractPostUrlFromCardDom(firstCard);
-    const text = firstCard.innerText || '';
-    const idMatch = text.match(/(?:ID thư viện|Library ID):\s*(\d+)/i);
-    const adArchiveId = idMatch ? idMatch[1] : null;
-
-    postUrl = domPostUrl || (adArchiveId ? `https://www.facebook.com/ads/library/?id=${adArchiveId}` : null);
   }
 
   // 2. Nếu chưa tìm thấy CTA ngoài card, thử click nút "Xem chi tiết quảng cáo"
@@ -393,7 +384,6 @@ async function extractFirstAdDetails() {
 
   if (!rawCtaUrl) {
     return {
-      postUrl,
       websiteUrl: null,
       websiteUrlRaw: null,
       rootDomain: null,
@@ -403,7 +393,6 @@ async function extractFirstAdDetails() {
 
   const decoded = decodeCtaUrl(rawCtaUrl);
   return {
-    postUrl,
     websiteUrl: decoded.websiteUrl,
     websiteUrlRaw: decoded.websiteUrlRaw,
     rootDomain: decoded.rootDomain,
@@ -590,11 +579,6 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
           }
         }
 
-        const postInfo = resolveCreativePostUrl(item, snap, pageId);
-        const resolvedPostUrl = (postInfo.fbPostUrl && !postInfo.fbPostUrl.includes('ads/library'))
-          ? postInfo.fbPostUrl
-          : (postInfo.reelUrl || postInfo.storyUrl || (item.ad_archive_id ? `https://www.facebook.com/ads/library/?id=${item.ad_archive_id}` : null));
-
         if (!pageMap.has(pageId)) {
           pageMap.set(pageId, {
             pageName,
@@ -602,10 +586,6 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
             pageId,
             identifier: pageId,
             isNumeric: true,
-            postUrl: resolvedPostUrl,
-            fbPostUrl: postInfo.fbPostUrl,
-            reelUrl: postInfo.reelUrl,
-            storyUrl: postInfo.storyUrl,
             websiteUrl,
             websiteUrlRaw: rawWebsite,
             rootDomain,
@@ -617,12 +597,6 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
             cur.websiteUrl = websiteUrl;
             cur.websiteUrlRaw = rawWebsite;
             cur.rootDomain = rootDomain;
-          }
-          if ((!cur.postUrl || cur.postUrl.includes('ads/library')) && postInfo.fbPostUrl && !postInfo.fbPostUrl.includes('ads/library')) {
-            cur.postUrl = postInfo.fbPostUrl;
-            cur.fbPostUrl = postInfo.fbPostUrl;
-            cur.reelUrl = postInfo.reelUrl;
-            cur.storyUrl = postInfo.storyUrl;
           }
         }
       }
@@ -687,318 +661,7 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
   return { pages: Array.from(pageMap.values()) };
 }
 
-/**
- * Trích xuất Video ID / Media ID từ mọi định dạng URL CDN của Facebook
- * Facebook CDN URL thường có dạng:
- *  - .../502763424_678391701483463_283573956325151437_n.mp4 (cluster_videoId_hash)
- *  - .../932868533169924_n.mp4 hoặc .../932868533169924.mp4
- *  - ...?v=932868533169924 hoặc &video_id=932868533169924
- */
-function extractFbMediaIdFromUrl(url) {
-  if (!url || typeof url !== 'string') return null;
-  // 1. Dạng chuẩn CDN Facebook: _<14-18 số>_ (cluster_videoId_hash)
-  const m1 = url.match(/_(\d{14,18})_/);
-  if (m1 && m1[1]) return m1[1];
-
-  // 2. Dạng /<14-18 số>_ hoặc /<14-18 số>.
-  const m2 = url.match(/\/(\d{14,18})[_\.]/);
-  if (m2 && m2[1]) return m2[1];
-
-  // 3. Dạng query parameter ?v= hoặc &video_id= hoặc &id=
-  const m3 = url.match(/[?&](?:v|video_id|id)=(\d{14,18})/);
-  if (m3 && m3[1]) return m3[1];
-
-  // 4. Tokenize tên file tìm bất kỳ khối 14-18 chữ số
-  try {
-    const filename = url.split('?')[0].split('/').pop() || '';
-    const parts = filename.split(/[_\.-]/);
-    for (const part of parts) {
-      if (/^\d{14,18}$/.test(part)) return part;
-    }
-  } catch (e) {
-    console.debug('[extractFbMediaIdFromUrl] Parse error:', e.message);
-  }
-
-  return null;
-}
-
-/**
- * Trích xuất link bài post gốc / Reel / Story thực tế trên Facebook cho một Ad Creative
- * Định dạng:
- *  - Facebook Story/Post: https://www.facebook.com/story.php?story_fbid=<fbid>&id=<pageId>
- *  - Facebook Reel: https://www.facebook.com/reel/<videoId>
- *  - Instagram Reel/Post: https://www.instagram.com/reel/<id> hoặc https://www.instagram.com/p/<id>
- *  - Fallback: https://www.facebook.com/ads/library/?id=<adArchiveId>
- */
-function resolveCreativePostUrl(item = {}, snap = {}, pageId = null) {
-  const adArchiveId = item.ad_archive_id || snap.ad_archive_id || '';
-  const fallbackAdLibrary = adArchiveId ? `https://www.facebook.com/ads/library/?id=${adArchiveId}` : null;
-  const targetPageId = String(pageId || snap.page_id || item.page_id || '');
-
-  let fbPostUrl = null;
-  let reelUrl = null;
-  let storyUrl = null;
-  let igUrl = null;
-  let videoId = null;
-
-  // 1. Kiểm tra page_post_id (khi ad được tạo từ bài post / reel có sẵn của Page)
-  const pagePostId = snap.page_post_id || item.page_post_id;
-  if (pagePostId) {
-    const str = String(pagePostId);
-    if (str.includes('_')) {
-      const parts = str.split('_');
-      const pId = parts[0] || targetPageId;
-      const fbid = parts[1];
-      if (fbid) {
-        storyUrl = `https://www.facebook.com/story.php?story_fbid=${fbid}&id=${pId}`;
-        fbPostUrl = storyUrl;
-      }
-    } else {
-      storyUrl = `https://www.facebook.com/story.php?story_fbid=${str}&id=${targetPageId}`;
-      fbPostUrl = storyUrl;
-    }
-  }
-
-  // 2. Kiểm tra post_url / permalink trực tiếp từ snapshot
-  if (!fbPostUrl && (snap.post_url || snap.permalink_url || item.post_url)) {
-    fbPostUrl = snap.post_url || snap.permalink_url || item.post_url;
-    if (fbPostUrl.includes('story_fbid')) storyUrl = fbPostUrl;
-    if (fbPostUrl.includes('/reel/')) reelUrl = fbPostUrl;
-  }
-
-  // 3. Trích xuất Reel / Video ID nếu ad là dạng Video (snap.videos hoặc item.videos)
-  const videos = snap.videos || item.videos || [];
-  if (Array.isArray(videos) && videos.length > 0) {
-    for (const v of videos) {
-      if (v.video_id || v.id) {
-        videoId = String(v.video_id || v.id);
-        break;
-      }
-      const candUrls = [v.video_sd_url, v.video_hd_url, v.video_preview_image_url].filter(Boolean);
-      for (const cu of candUrls) {
-        const foundId = extractFbMediaIdFromUrl(cu);
-        if (foundId) {
-          videoId = foundId;
-          break;
-        }
-      }
-      if (videoId) break;
-    }
-  }
-
-  // 4. Nếu là Carousel (snap.cards), kiểm tra video trong từng thẻ card
-  if (!videoId && Array.isArray(snap.cards) && snap.cards.length > 0) {
-    for (const card of snap.cards) {
-      if (card.video_id || card.id) {
-        videoId = String(card.video_id || card.id);
-        break;
-      }
-      const candUrls = [card.video_sd_url, card.video_hd_url, card.video_preview_image_url].filter(Boolean);
-      for (const cu of candUrls) {
-        const foundId = extractFbMediaIdFromUrl(cu);
-        if (foundId) {
-          videoId = foundId;
-          break;
-        }
-      }
-      if (videoId) break;
-    }
-  }
-
-  // 5. Nếu tìm được videoId: Tạo link Reel & Story
-  if (videoId) {
-    reelUrl = `https://www.facebook.com/reel/${videoId}`;
-    if (targetPageId) {
-      storyUrl = `https://www.facebook.com/story.php?story_fbid=${videoId}&id=${targetPageId}`;
-    }
-    if (!fbPostUrl) {
-      // Ưu tiên Story URL (mở thẳng bài post xem like/share/cmt chuẩn xác), fallback sang Reel URL
-      fbPostUrl = storyUrl || reelUrl;
-    }
-  }
-
-  // 6. Kiểm tra Instagram Reel / Post
-  if (snap.instagram_permalink_url) {
-    igUrl = snap.instagram_permalink_url;
-    if (!fbPostUrl) fbPostUrl = igUrl;
-  } else if (snap.instagram_actor_name) {
-    igUrl = `https://www.instagram.com/${snap.instagram_actor_name}/`;
-  }
-
-  // 7. Nếu là Ảnh (Images) và chưa có postUrl: trích xuất Media ID từ ảnh
-  if (!fbPostUrl && !videoId && Array.isArray(snap.images) && snap.images.length > 0) {
-    for (const img of snap.images) {
-      const candUrls = [img.original_image_url, img.resized_image_url].filter(Boolean);
-      for (const cu of candUrls) {
-        const foundId = extractFbMediaIdFromUrl(cu);
-        if (foundId) {
-          if (targetPageId) {
-            storyUrl = `https://www.facebook.com/story.php?story_fbid=${foundId}&id=${targetPageId}`;
-            fbPostUrl = storyUrl;
-          } else {
-            fbPostUrl = `https://www.facebook.com/photo/?fbid=${foundId}`;
-          }
-          break;
-        }
-      }
-      if (fbPostUrl) break;
-    }
-  }
-
-  // 8. Thử trích xuất từ DOM nếu đang ở trang Ad Library có card render
-  if (!fbPostUrl && typeof document !== 'undefined' && adArchiveId) {
-    try {
-      const cardEl = findCardElementByAdId(adArchiveId);
-      if (cardEl) {
-        const domPost = extractPostUrlFromCardDom(cardEl, targetPageId);
-        if (domPost) {
-          fbPostUrl = domPost;
-          if (domPost.includes('/reel/')) reelUrl = domPost;
-          if (domPost.includes('story_fbid')) storyUrl = domPost;
-        }
-      }
-    } catch (e) {
-      console.debug('[resolveCreativePostUrl] Card DOM fallback notice:', e.message);
-    }
-  }
-
-  return {
-    fbPostUrl: fbPostUrl || fallbackAdLibrary,
-    reelUrl: reelUrl || null,
-    storyUrl: storyUrl || null,
-    igUrl: igUrl || null,
-    adLibraryUrl: fallbackAdLibrary,
-    videoId: videoId
-  };
-}
-
-/**
- * Tìm DOM element của thẻ quảng cáo theo adArchiveId
- */
-function findCardElementByAdId(adId) {
-  if (!document.body) return null;
-  const cards = Array.from(document.querySelectorAll('div[role="dialog"], div[class*="x1plvlek"], div[class*="x1cy8zhl"], div[role="region"], div[data-testid*="ad"]'));
-  return cards.find(c => (c.innerText || '').includes(String(adId))) || null;
-}
-
-/**
- * Trích xuất link post/reel/video từ DOM của 1 card
- */
-function extractPostUrlFromCardDom(cardEl, pageId) {
-  if (!cardEl) return null;
-  const link = cardEl.querySelector('a[href*="/reel/"], a[href*="story.php"], a[href*="/posts/"], a[href*="/videos/"], a[href*="instagram.com/p/"], a[href*="instagram.com/reel/"]');
-  if (link && link.href) return link.href;
-
-  const video = cardEl.querySelector('video');
-  if (video) {
-    const src = video.currentSrc || video.src || '';
-    const poster = video.getAttribute('poster') || video.poster || '';
-    const vid = extractFbMediaIdFromUrl(src) || extractFbMediaIdFromUrl(poster);
-    if (vid) {
-      return pageId ? `https://www.facebook.com/story.php?story_fbid=${vid}&id=${pageId}` : `https://www.facebook.com/reel/${vid}`;
-    }
-  }
-
-  const img = cardEl.querySelector('img[src*="fbcdn.net"], img[src*="scontent"]');
-  if (img) {
-    const isrc = img.currentSrc || img.src || '';
-    const iid = extractFbMediaIdFromUrl(isrc);
-    if (iid) {
-      return pageId ? `https://www.facebook.com/story.php?story_fbid=${iid}&id=${pageId}` : `https://www.facebook.com/photo/?fbid=${iid}`;
-    }
-  }
-
-  return null;
-}
-
-/**
- * Lấy canonical Story / Post URL (chính xác 100%) từ Facebook Reel/Video
- * Áp dụng giải thuật bóc tách HTML nội bộ với credentials: "include":
- * 1. Decode base64 storyID (format: S:_I<pageId>:<postId>)
- * 2. Match top_level_post_id và content_owner_id_new
- * 3. Trích xuất chỉ số tương tác: reactions, comments, shares, views
- */
-async function resolveCanonicalStoryFromReel(videoId, fallbackPageId) {
-  if (!videoId) return null;
-  let engagement = { reactions: '0', comments: '0', shares: '0', views: '0' };
-  let post = null;
-  let page = null;
-  try {
-    const res = await fetch(`https://www.facebook.com/reel/${videoId}`, {
-      credentials: 'include',
-      headers: { Accept: 'text/html,application/xhtml+xml' }
-    });
-    if (res.ok) {
-      const h = await res.text();
-
-      // 1. Decode storyID base64 (chuẩn bài đăng chính thức của Facebook)
-      const storyIdMatches = [...h.matchAll(/"storyID":"([A-Za-z0-9+/=]+)"/g)];
-      for (const sm of storyIdMatches) {
-        try {
-          const decoded = atob(sm[1]);
-          if (/^S:_I\d+:/.test(decoded)) {
-            const parts = decoded.split(':');
-            page = parts[1].slice(2);
-            post = parts.slice(2).find(x => /^\d+$/.test(x));
-            if (page && post) break;
-          }
-        } catch (e) {
-          console.debug('[resolveCanonicalStoryFromReel] base64 decode notice:', e.message);
-        }
-      }
-
-      // 2. Parse top_level_post_id & content_owner_id_new
-      if (!post || !page) {
-        const topMatches = [...h.matchAll(/\\*"top_level_post_id\\*":\\*"(\d+)\\*",\\*"content_owner_id_new\\*":\\*"?(\d+)([^]{0,400})/g)];
-        for (const tm of topMatches) {
-          const pId = tm[1];
-          const cId = tm[2];
-          const vIdMatch = tm[3].match(/video_id\\*":\\*"?(\d+)/);
-          const vId = vIdMatch ? vIdMatch[1] : null;
-          if (!vId || vId === String(videoId) || pId === String(videoId)) {
-            post = pId;
-            page = cId;
-            break;
-          }
-        }
-      }
-
-      // 3. Trích xuất chỉ số tương tác (Likes, Comments, Shares, Views)
-      const rxMatch = h.match(/"reaction_count":\s*\{\s*"count":\s*(\d+)/i) || 
-                      h.match(/"i18n_reaction_count":\s*"([^"]+)"/i) ||
-                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:lượt thích|reactions|likes)/i);
-      if (rxMatch) engagement.reactions = String(rxMatch[1]);
-
-      const cmMatch = h.match(/"total_comment_count":\s*(\d+)/i) ||
-                      h.match(/"comment_count":\s*\{\s*"total_count":\s*(\d+)/i) ||
-                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:bình luận|comments)/i);
-      if (cmMatch) engagement.comments = String(cmMatch[1]);
-
-      const shMatch = h.match(/"share_count":\s*\{\s*"count":\s*(\d+)/i) ||
-                      h.match(/"share_count_reduced":\s*"([^"]+)"/i) ||
-                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:lượt chia sẻ|shares)/i);
-      if (shMatch) engagement.shares = String(shMatch[1]);
-
-      const vwMatch = h.match(/"play_count":\s*(\d+)/i) ||
-                      h.match(/"video_view_count":\s*(\d+)/i) ||
-                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:lượt xem|views|plays)/i);
-      if (vwMatch) engagement.views = String(vwMatch[1]);
-    }
-  } catch (err) {
-    console.debug('[ContentFB] resolveCanonicalStoryFromReel notice:', err.message);
-  }
-
-  const finalPost = post || videoId;
-  const finalPage = page || fallbackPageId;
-  const storyUrl = finalPage ? `https://www.facebook.com/story.php?story_fbid=${finalPost}&id=${finalPage}` : `https://www.facebook.com/reel/${videoId}`;
-
-  return {
-    storyUrl,
-    post: finalPost,
-    page: finalPage,
-    engagement
-  };
-}
+// ── Các hàm xử lý GraphQL & Bóc tách Ads Creative ──────────────────
 
 async function getAdDetailsViaGraphQL(pageId, config = {}) {
   const country = config.country || 'ALL';
@@ -1044,13 +707,8 @@ async function getAdDetailsViaGraphQL(pageId, config = {}) {
       if (rawCta) {
         const decoded = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(rawCta) : null;
         if (decoded && decoded.websiteUrl) {
-          const postInfo = resolveCreativePostUrl(item, snap, pageId);
           return {
-            postUrl: postInfo.fbPostUrl,
-            fbPostUrl: postInfo.fbPostUrl,
-            reelUrl: postInfo.reelUrl,
-            storyUrl: postInfo.storyUrl,
-            adLibraryUrl: postInfo.adLibraryUrl,
+            adLibraryUrl: `https://www.facebook.com/ads/library/?id=${item.ad_archive_id || ''}`,
             websiteUrl: decoded.websiteUrl,
             websiteUrlRaw: decoded.websiteUrlRaw || rawCta,
             rootDomain: decoded.rootDomain,
@@ -1137,16 +795,9 @@ async function extractAllAdsViaGraphQL(pageId, limit = 50, config = {}) {
       const ctaText = snap.cta_text || 'Mua ngay';
       const ctaType = snap.cta_type || 'SHOP_NOW';
 
-      // Trích xuất link Facebook Post / Reel / Story cho Ad Creative này
-      const postInfo = resolveCreativePostUrl(item, snap, pageId);
-
       ads.push({
         adId: adId,
-        fbPostUrl: postInfo.fbPostUrl,
-        reelUrl: postInfo.reelUrl,
-        storyUrl: postInfo.storyUrl,
-        igUrl: postInfo.igUrl,
-        adLibraryUrl: postInfo.adLibraryUrl || `https://www.facebook.com/ads/library/?id=${adId}`,
+        adLibraryUrl: `https://www.facebook.com/ads/library/?id=${adId}`,
         destinationUrl: cleanUrl,
         rawUrl: rawCta,
         mediaFormat: mediaFormat,
@@ -1155,27 +806,8 @@ async function extractAllAdsViaGraphQL(pageId, limit = 50, config = {}) {
         title: snap.title || '',
         body: snap.body?.text || '',
         caption: snap.caption || '',
-        creationTime: snap.creation_time || null,
-        videoId: postInfo.videoId,
-        engagement: null
+        creationTime: snap.creation_time || null
       });
-    }
-  }
-
-  // Cố gắng giải mã canonical story URL & engagement cho bài video nổi bật đầu tiên
-  for (let i = 0; i < Math.min(ads.length, 3); i++) {
-    const a = ads[i];
-    if (a.videoId) {
-      try {
-        const canRes = await resolveCanonicalStoryFromReel(a.videoId, pageId);
-        if (canRes && canRes.storyUrl) {
-          a.storyUrl = canRes.storyUrl;
-          a.fbPostUrl = canRes.storyUrl;
-          a.engagement = canRes.engagement;
-        }
-      } catch (e) {
-        console.debug('[extractAllAdsViaGraphQL] Resolve reel notice:', e.message);
-      }
     }
   }
 
@@ -1442,24 +1074,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Kiểm tra chặn đơn thuần
         case 'CHECK_BLOCKED': {
           sendResponse({ ok: true, ...blockCheck });
-          break;
-        }
-
-        // Bóc tách canonical Story URL và chỉ số tương tác (Likes, Comments, Shares, Views)
-        case 'RESOLVE_POST_ENGAGEMENT': {
-          const videoId = payload?.videoId;
-          const fallbackPageId = payload?.pageId;
-          if (!videoId) {
-            sendResponse({ ok: false, error: 'Thiếu videoId' });
-            return;
-          }
-          try {
-            const result = await resolveCanonicalStoryFromReel(videoId, fallbackPageId);
-            sendResponse({ ok: true, data: result });
-          } catch (resErr) {
-            console.debug('[ContentFB] RESOLVE_POST_ENGAGEMENT error:', resErr.message);
-            sendResponse({ ok: false, error: resErr.message });
-          }
           break;
         }
 
