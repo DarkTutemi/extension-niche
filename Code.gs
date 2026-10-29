@@ -115,6 +115,42 @@ function testDirectWrite() {
 }
 
 /**
+ * Hàm xóa toàn bộ dữ liệu trên cả 2 sheet và khởi tạo lại tiêu đề mới
+ * Chạy hàm này trực tiếp trong Apps Script Editor để dọn sạch bảng tính
+ */
+function clearAllData() {
+  setupSecretKey();
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss && typeof SPREADSHEET_ID !== 'undefined' && SPREADSHEET_ID.trim()) {
+    try {
+      ss = SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+    } catch (e) {
+      Logger.log('❌ Lỗi mở Sheet: ' + e.message);
+      throw e;
+    }
+  }
+  if (!ss) {
+    throw new Error('Chưa tìm thấy Sheet! Nếu dùng script độc lập, vui lòng điền SPREADSHEET_ID ở dòng 26.');
+  }
+
+  let sheet1 = ss.getSheetByName(SHEET_NAME);
+  if (sheet1) {
+    sheet1.clear();
+    initSheetHeader(sheet1);
+    Logger.log('✅ Đã clear dữ liệu và reset tiêu đề sheet: ' + SHEET_NAME);
+  }
+
+  let sheet2 = ss.getSheetByName(CREATIVES_SHEET_NAME);
+  if (sheet2) {
+    sheet2.clear();
+    initCreativesSheetHeader(sheet2);
+    Logger.log('✅ Đã clear dữ liệu và reset tiêu đề sheet: ' + CREATIVES_SHEET_NAME);
+  }
+
+  Logger.log('🎉 ĐÃ CLEAR TOÀN BỘ DỮ LIỆU THÀNH CÔNG!');
+}
+
+/**
  * Xử lý yêu cầu POST gửi từ Chrome Extension
  */
 function doPost(e) {
@@ -158,14 +194,6 @@ function doPost(e) {
       }, 401);
     }
 
-    const data = payload.data;
-    if (!data || !data.pageId || !data.keyword) {
-      return createJsonResponse({ 
-        ok: false, 
-        error: 'Dữ liệu thiếu thông tin bắt buộc (pageId hoặc keyword).' 
-      }, 400);
-    }
-
     // 4. Mở hoặc tạo Sheet đích (hỗ trợ cả Script container-bound và Standalone)
     let ss = SpreadsheetApp.getActiveSpreadsheet();
     if (!ss && typeof SPREADSHEET_ID !== 'undefined' && SPREADSHEET_ID.trim()) {
@@ -196,6 +224,32 @@ function doPost(e) {
         ok: false, 
         error: 'Lỗi: Không tìm thấy Google Sheet liên kết! Nếu script tạo từ script.google.com, vui lòng điền SPREADSHEET_ID ở dòng 26 trong Code.gs hoặc tạo Apps Script từ trong Google Sheet (Tiện ích mở rộng -> Apps Script).' 
       }, 500);
+    }
+
+    // ── XỬ LÝ LỆNH CLEAR TOÀN BỘ SHEET NẾU CÓ ACTION CLEAR_ALL ──
+    if (payload.action === 'CLEAR_ALL' || payload.action === 'CLEAR') {
+      let sheet1 = ss.getSheetByName(SHEET_NAME);
+      if (sheet1) {
+        sheet1.clear();
+        initSheetHeader(sheet1);
+      }
+      let sheet2 = ss.getSheetByName(CREATIVES_SHEET_NAME);
+      if (sheet2) {
+        sheet2.clear();
+        initCreativesSheetHeader(sheet2);
+      }
+      return createJsonResponse({ 
+        ok: true, 
+        message: 'Đã clear toàn bộ dữ liệu 2 sheet và reset tiêu đề thành công!' 
+      });
+    }
+
+    const data = payload.data;
+    if (!data || !data.pageId || !data.keyword) {
+      return createJsonResponse({ 
+        ok: false, 
+        error: 'Dữ liệu thiếu thông tin bắt buộc (pageId hoặc keyword).' 
+      }, 400);
     }
 
     let sheet = ss.getSheetByName(SHEET_NAME);

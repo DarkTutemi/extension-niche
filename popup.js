@@ -763,6 +763,53 @@ function setupListeners() {
     });
   }
 
+  // Nút Xóa sạch dữ liệu Google Sheet
+  const btnClearSheet = document.getElementById('btnClearSheet');
+  if (btnClearSheet) {
+    btnClearSheet.addEventListener('click', async () => {
+      const confirmed = window.confirm('⚠️ Ông chủ có chắc chắn muốn xóa toàn bộ dữ liệu trên cả 2 sheet (FB_Ads_Research & FB_Ads_Creatives) không?\n\nHành động này sẽ reset bảng tính về trạng thái ban đầu.');
+      if (!confirmed) return;
+
+      const sheetsUrl = elSheetsUrl?.value?.trim();
+      const secretKey = elSecretKey?.value?.trim();
+
+      if (!sheetsUrl || !secretKey) {
+        alert('❌ Chưa cấu hình Google Apps Script URL hoặc Secret Key!');
+        return;
+      }
+
+      btnClearSheet.disabled = true;
+      btnClearSheet.textContent = '⏳ Đang xóa...';
+
+      try {
+        const res = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            secretKey,
+            action: 'CLEAR_ALL'
+          })
+        });
+
+        const json = await res.json();
+        if (json.ok) {
+          alert('✅ ĐÃ XÓA SẠCH DỮ LIỆU GOOGLE SHEET THÀNH CÔNG!\nBảng tính đã được reset tiêu đề chuẩn sẵn sàng cho lượt quét mới.');
+          chrome.runtime.sendMessage({
+            type: 'CONTENT_LOG',
+            payload: { message: '🗑️ Đã xóa sạch dữ liệu trên Google Sheet theo yêu cầu của ông chủ!', type: 'SAVED' }
+          }).catch(err => console.debug('[Popup] log clear skipped:', err.message));
+        } else {
+          alert('❌ Lỗi từ Google Sheet: ' + (json.error || 'Không xác định'));
+        }
+      } catch (err) {
+        alert('❌ Không thể kết nối tới Google Apps Script: ' + err.message + '\n\nNếu chưa cập nhật Code.gs mới trên Apps Script, ông chủ hãy vào Tiện ích mở rộng -> Apps Script -> chạy hàm clearAllData() nhé!');
+      } finally {
+        btnClearSheet.disabled = false;
+        btnClearSheet.textContent = '🗑️ Xóa sạch dữ liệu Google Sheet';
+      }
+    });
+  }
+
   // Lắng nghe thay đổi storage
   if (typeof chrome !== 'undefined' && chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
