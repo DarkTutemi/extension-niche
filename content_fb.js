@@ -707,7 +707,9 @@ function extractFbMediaIdFromUrl(url) {
     for (const part of parts) {
       if (/^\d{14,18}$/.test(part)) return part;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.debug('[extractFbMediaIdFromUrl] Parse error:', e.message);
+  }
 
   return null;
 }
@@ -847,7 +849,9 @@ function resolveCreativePostUrl(item = {}, snap = {}, pageId = null) {
           if (domPost.includes('story_fbid')) storyUrl = domPost;
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.debug('[resolveCreativePostUrl] Card DOM fallback notice:', e.message);
+    }
   }
 
   return {
@@ -918,7 +922,9 @@ async function resolveCanonicalStoryFromReel(videoId, fallbackPageId) {
           post = parts.slice(2).find(x => /^\d+$/.test(x));
           if (page && post) break;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.debug('[resolveCanonicalStoryFromReel] base64 decode notice:', e.message);
+      }
     }
 
     // 2. Parse top_level_post_id & content_owner_id_new

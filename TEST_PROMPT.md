@@ -1,5 +1,5 @@
 # 🧪 MASTER TEST PROMPT: TOÀN DIỆN & CHUYÊN SÂU FB ADS PRODUCT RESEARCH EXTENSION
-## (Chuẩn Kiểm thử ECC: 100% Meta GraphQL API, Quản lý Vòng đời Tab Nghiêm ngặt, 2 Cổng Sàng lọc & Đồng bộ AppSheet)
+## (Chuẩn Kiểm thử ECC: 100% Meta GraphQL API, Quản lý Vòng đời Tab Nghiêm ngặt, 2 Cổng Sàng lọc, Trích xuất Link Post/Reel Tương tác & Đồng bộ AppSheet)
 
 > **Hướng dẫn sử dụng:**  
 > Dán toàn bộ nội dung tài liệu này vào Agent / AI hoặc sử dụng làm tài liệu quy trình kiểm chuẩn (SOP) để thực hiện chu trình kiểm thử, giám sát, bắt lỗi, vá mã nguồn và tự động hóa cho tiện ích mở rộng **FB Ads Product Research**.
@@ -31,9 +31,11 @@ Một tính năng chỉ được chứng nhận **ĐẠT (PASS)** khi thỏa mã
 2. **Quy tắc Quản lý Vòng đời Tab nghiêm ngặt (Strict Tab Lifecycle):**
    - **Tab Mẹ (Tìm kiếm Từ Khóa):** Mở ra và **TUYỆT ĐỐI KHÔNG ĐƯỢC ĐÓNG** khi cào xong, giữ làm tab gốc duy trì phiên làm việc xuyên suốt.
    - **Tab Con (Từng Fanpage):** Mở riêng cho từng Page. Rớt Cổng 1 hoặc Cổng 2 $\rightarrow$ Đóng tab ngay để giải phóng RAM. Đạt chuẩn $\rightarrow$ Giữ tab tiếp tục nhấp link ads, kiểm tra website, crawl toàn bộ ads kèm CTA qua API, upload Google Sheet xong mới đóng tab.
-3. **Cào 100% bằng Meta GraphQL API:** Tuyệt đối không dùng cuộn chuột DOM giả lập hay giới hạn số lần cuộn (`maxScrolls`). Tự động phân trang bằng con trỏ GraphQL Cursor để cào TOÀN BỘ Page của từ khóa.
-4. **Silent Failure Zero-Tolerance:** Không chấp nhận bất kỳ khối `catch (_) {}` nào trong codebase. Mọi lỗi phải được ghi log hoặc có cơ chế retry phục hồi.
-5. **Tự động vá lỗi (Self-Healing Loop):** Khi phát hiện sai lệch giữa Visual/DOM/API/Log, Agent phải lập tức truy nguyên nguyên nhân gốc rễ, sửa mã nguồn tại chỗ và kiểm tra lại bằng `.ecc/eval-harness.js`.
+3. **Cào 100% bằng Meta GraphQL API:** Tuyệt đối không dùng cuộn chuột DOM giả lập hay giới hạn số lần cuộn (`maxScrolls`). Tự động phân trang bằng con trỏ GraphQL Cursor để cào TOÀN BỘ Page của từ khóa. Tích hợp bộ **Fallback 4 Tầng thông minh** chống trả về 0 kết quả.
+4. **Giải mã 100% chính xác Link Post / Reel Facebook để soi tương tác:** Bóc tách Video ID từ tên file CDN Facebook (`_(\d{14,18})_`) và giải mã `storyID` Base64 (`S:_I<pageId>:<postId>`) để tạo link `https://www.facebook.com/story.php?story_fbid=...&id=...` và `/reel/...` giúp người dùng click vào là xem được ngay lượt Like, Comment, Share.
+5. **Chống lỗi SyntaxError & Trùng lặp Script (Re-injection Guard):** Cơ chế ping `CHECK_READY` trước khi inject content script và sử dụng `globalThis` an toàn, loại bỏ hoàn toàn lỗi `Identifier has already been declared`.
+6. **Silent Failure Zero-Tolerance:** Không chấp nhận bất kỳ khối `catch (_) {}` nào trong codebase. Mọi lỗi phải được ghi log hoặc có cơ chế retry phục hồi.
+7. **Tự động vá lỗi (Self-Healing Loop):** Khi phát hiện sai lệch giữa Visual/DOM/API/Log, Agent phải lập tức truy nguyên nguyên nhân gốc rễ, sửa mã nguồn tại chỗ và kiểm tra lại bằng `.ecc/eval-harness.js`.
 
 ---
 
@@ -48,7 +50,7 @@ Một tính năng chỉ được chứng nhận **ĐẠT (PASS)** khi thỏa mã
 
 ### 2.2. Khởi tạo phiên kiểm thử:
 ```bash
-# 1. Chạy bộ đánh giá kiểm tra cú pháp và logic ban đầu
+# 1. Chạy bộ đánh giá kiểm tra cú pháp và logic ban đầu (yêu cầu 17/17 PASS)
 node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
 
 # 2. Khởi động máy chủ cục bộ phục vụ kiểm thử Side Panel / Popup
@@ -122,42 +124,46 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
 
 ---
 
-### 🔹 SUITE 3: KIỂM THỬ BỘ LỌC ADS LIBRARY & MIN DATE TỰ ĐỘNG
+### 🔹 SUITE 3: KIỂM THỬ BỘ LỌC ADS LIBRARY, TÍNH TOÁN NGÀY LÙI & CHUẨN HÓA ENUM
 
-* **Mục tiêu:** Kiểm tra bộ lọc chuyên sâu và thuật toán tính toán ngày lùi (Min Date 1-12 tháng).
+* **Mục tiêu:** Kiểm tra bộ lọc chuyên sâu, thuật toán tính ngày lùi (Min Date 1-12 tháng) và cơ chế chuẩn hóa Enum tránh lỗi GraphQL Schema.
 * **Các bước thực hiện:**
   1. **Kiểm tra tính toán ngày tự động:**
      * Lần lượt đổi `#minMonthsAgo` từ `1`, `3`, `6`, `12` tháng.
-     * Kiểm tra chéo: So sánh với ngày thực tế, xử lý đúng ngày đầu tháng, cuối tháng và chuyển năm (ví dụ lùi 3 tháng từ 27/10/2026 $\rightarrow$ 27/07/2026).
-  2. **Kiểm tra các tham số bộ lọc:**
-     * `mediaType`: `Chỉ Video (TikTok/Reels Ads)` $\rightarrow$ `mediaType: "video"`.
-     * `publisherPlatform`: `Facebook Feed / Video` $\rightarrow$ `publisherPlatforms: ["facebook"]`.
-     * `searchType`: `Cụm từ chính xác ("Exact")` $\rightarrow$ ép từ khóa vào ngoặc kép `\"...\"`.
-     * `sortMode`: `Lượt hiển thị cao nhất (Impressions)` $\rightarrow$ `SORT_BY_TOTAL_IMPRESSIONS`.
+     * Kiểm tra chéo: So sánh với ngày thực tế, xử lý đúng ngày đầu tháng, cuối tháng và chuyển năm (ví dụ lùi 3 tháng từ 29/10/2026 $\rightarrow$ 29/07/2026).
+  2. **Kiểm tra chuẩn hóa Enum `sortMode` cho Meta GraphQL:**
+     * Meta GraphQL schema (`AdLibrarySearchPaginationQuery`) **chỉ chấp nhận**: `SORT_BY_TOTAL_IMPRESSIONS` hoặc `SORT_BY_RELEVANCY_MONTHLY_GROUPED`.
+     * Nếu người dùng chọn "Ngày bắt đầu mới nhất (Recent)", trên Web URL gửi `sort_data[mode]=start_date`, nhưng biến GraphQL `sortData.mode` **phải được tự động ép về enum hợp lệ** (`SORT_BY_TOTAL_IMPRESSIONS`), tuyệt đối không gửi `SORT_BY_START_DATE` làm sập truy vấn GraphQL.
+  3. **Làm sạch từ khóa tự động (Quote Sanitization):**
+     * Tự động gọt sạch dấu ngoặc kép thừa ở 2 đầu từ khóa (`replace(/^["']+|["']+$/g, '')`), tránh lỗi lồng ngoặc kép `""Bibles and Coffee""` làm mất kết quả.
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
   * `startDateMin` luôn có định dạng chuẩn `YYYY-MM-DD`.
   * Nhãn `minDateDisplay` hiển thị định dạng người dùng `DD/MM/YYYY`.
+  * Không bao giờ phát sinh lỗi GraphQL schema invalid enum.
 
 ---
 
-### 🔹 SUITE 4: KIỂM THỬ 100% META GRAPHQL API CRAWLER & PHÂN TRANG KHÔNG GIỚI HẠN
+### 🔹 SUITE 4: KIỂM THỬ 100% META GRAPHQL API CRAWLER & BỘ FALLBACK 4 TẦNG THÔNG MINH
 
-* **Mục tiêu:** Xác minh động cơ thu thập hoàn toàn bằng Meta GraphQL API, tự động phân trang bằng con trỏ Cursor, lấy TOÀN BỘ Page của từ khóa mà không bị giới hạn.
+* **Mục tiêu:** Xác minh động cơ thu thập hoàn toàn bằng Meta GraphQL API, tự động phân trang bằng con trỏ Cursor, lấy TOÀN BỘ Page và kích hoạt Fallback 4 tầng khi không có kết quả ban đầu.
 * **Các bước thực hiện:**
-  1. Kiểm tra cấu trúc truy vấn gửi tới `https://www.facebook.com/api/graphql/`:
-     * Endpoint: `AdLibraryMobileFocusedStateProviderRefetchQuery` hoặc doc_id tương thích.
-     * Biến `queryString`: Đặt trong dấu ngoặc kép khi chọn Exact Phrase (`"magnetic phone mount"`).
-     * Biến `mediaType`: `video`.
-     * Biến `publisherPlatforms`: `['facebook']`.
-  2. Kiểm tra vòng lặp phân trang GraphQL Cursor (`content_fb.js`):
+  1. **Kiểm tra cấu trúc truy vấn gửi tới `https://www.facebook.com/api/graphql/`:**
+     * `doc_id: '24922295957467452'` (hoặc doc_id phân trang hợp lệ).
+     * Bóc tách Token bảo mật tự động: `fb_dtsg`, `lsd`, `userId` từ thẻ `<script>` DOM bằng đa regex (kể cả dạng token Base64 timestamp).
+  2. **Kiểm tra Bộ Fallback 4 Tầng chống "0 kết quả":**
+     * **Tầng 1:** Tìm kiếm chính xác (Exact Phrase) với đầy đủ bộ lọc người dùng chọn.
+     * **Tầng 2:** Nếu trả về 0 kết quả $\rightarrow$ tự động mở rộng sang tìm kiếm cụm từ (`KEYWORD_UNORDERED`).
+     * **Tầng 3:** Nếu vẫn 0 kết quả do bộ lọc ngày (`startDateMin`) $\rightarrow$ tự động thử lại toàn thời gian (All-time, `startDate = null`).
+     * **Tầng 4:** Nếu vẫn 0 kết quả do lọc video $\rightarrow$ tự động mở rộng sang tất cả định dạng (`mediaType = 'all'`).
+  3. **Kiểm tra vòng lặp phân trang Cursor:**
      * Đọc `page_info.has_next_page` và `page_info.end_cursor`.
-     * Nếu còn kết quả và `maxPages === 0`, tiếp tục gửi request đợt sau với `cursor: end_cursor` cho đến khi thu thập hết toàn bộ.
-  3. Kiểm tra định dạng log chuẩn:
-     * Phải in đúng dòng log: `[INFO] 📋 Tìm thấy tất cả xxx Page hàng đầu cho "<từ khóa>"`.
+     * Lấy toàn bộ Page cho đến khi hết cursor hoặc đạt `maxPages`.
+  4. **Kiểm tra định dạng log chuẩn:**
+     * In đúng dòng log: `[INFO] 📋 Tìm thấy tất cả xxx Page hàng đầu cho "<từ khóa>"`.
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
   * Thu thập sạch sẽ danh sách Fanpage kèm Page ID số duy nhất, loại bỏ 100% trùng lặp.
   * Tốc độ phản hồi cực nhanh ~2-3 giây cho mỗi đợt truy vấn.
-  * Log ghi chuẩn từng câu chữ theo yêu cầu.
+  * Không bao giờ bị rớt sang 0 Page khi dữ liệu thực tế trên Facebook vẫn tồn tại.
 
 ---
 
@@ -216,26 +222,34 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
 
 ---
 
-### 🔹 SUITE 7: KIỂM THỬ CRAWL CREATIVES (VIDEO/ẢNH/CTA) & ĐỒNG BỘ APPSHEET
+### 🔹 SUITE 7: KIỂM THỬ BÓC TÁCH CREATIVES, TRÍCH XUẤT LINK POST/REEL TƯƠNG TÁC & ĐỒNG BỘ APPSHEET
 
-* **Mục tiêu:** Trên tab đang giữ của Page WINNER, cào toàn bộ danh sách ads kèm nút CTA qua API và upload đồng bộ lên Google Sheets (chuẩn AppSheet).
+* **Mục tiêu:** Trên tab đang giữ của Page WINNER, cào toàn bộ danh sách ads kèm nút CTA qua API, bóc tách chính xác 100% link bài post / reel trên Facebook để soi tương tác (Like, Comment, Share) và upload đồng bộ lên Google Sheets.
 * **Các bước thực hiện:**
   1. **Crawl toàn bộ Ads Creatives qua API:**
-     * In log: `[INFO] 🎬 Đang crawl toàn bộ quảng cáo kèm CTA của Page [<Tên Page>] qua API trên tab #......`.
-     * Bóc tách các trường: Dạng bài (`VIDEO`/`IMAGE`/`CAROUSEL`), **Link bài Post / Reel thực tế trên Facebook (`story.php?story_fbid=...&id=...` hoặc `reel/...` để soi tương tác: like, comment, share)**, Nút CTA (`SHOP_NOW`, `GET_OFFER`...), Link sản phẩm sạch.
+     * In log: `[INFO] 🎬 Đang crawl toàn bộ quảng cáo kèm CTA của Page [<Tên Page>] qua API trên tab #...`.
+     * Bóc tách các trường: Dạng bài (`VIDEO`/`IMAGE`/`CAROUSEL`), Nút CTA (`SHOP_NOW`, `GET_OFFER`...), Link sản phẩm đích sạch.
+  2. **Trích xuất Video ID và tạo Link Post / Reel Facebook chuẩn xác 100%:**
+     * **Phương pháp trích xuất Media ID từ URL CDN Facebook:**
+       * Hàm `extractFbMediaIdFromUrl` nhận diện chính xác cụm 14-18 chữ số dạng `.../<cluster>_<videoId>_<hash>_n.mp4` từ `video_sd_url`, `video_hd_url`, `video_preview_image_url`.
+     * **Sinh đồng thời cả 2 định dạng URL:**
+       * **Canonical Story URL:** `https://www.facebook.com/story.php?story_fbid=${videoId}&id=${targetPageId}` $\rightarrow$ Mở trực tiếp giao diện bài post đầy đủ với lượt Like, toàn bộ bình luận, chia sẻ và avatar Page.
+       * **Reel URL:** `https://www.facebook.com/reel/${videoId}` $\rightarrow$ Mở trình phát video Reel trực quan.
+     * **Giải thuật bóc tách HTML nội bộ (`resolveCanonicalStoryFromReel`):**
+       * Giải mã Base64 `storyID` (`S:_I<pageId>:<postId>`) và quét `top_level_post_id` / `content_owner_id_new` khi cần truy nguyên nguồn gốc bài viết.
+     * **Hỗ trợ bài đăng dạng Ảnh (Image Ads):** Trích xuất Photo ID từ link ảnh để tạo `story.php?story_fbid=${photoId}&id=${pageId}`.
      * In log: `[INFO] 📦 Đã bóc tách thành công X ads creative (Y Video/Reel links, Z Images/Carousels) cho [<Tên Page>]`.
-  2. **Upload Google Sheets & AppSheet:**
+  3. **Upload Google Sheets & AppSheet (Đồng bộ Cột F):**
      * In log: `[INFO] 📤 Đang upload dữ liệu Store và X ads creative lên Google Sheet...`.
-     * Gửi Webhook POST tới Google Apps Script (`Code.gs`):
-       * Bảng 1 (`FB_Ads_Research`): Thông tin Store WINNER (Ngách, Keyword, Page ID, Tên Page, Web, Active Ads, Ratio, Số SP).
-       * Bảng 2 (`FB_Ads_Creatives`): Chi tiết từng bài ads liên kết theo `Page ID` để xem trên AppSheet.
+     * **Bảng 1 (`FB_Ads_Research` - Cột F `Link Post Ads`):** Ghi link bài post `story.php` hoặc Reel thực tế của Page, thay thế hoàn toàn link thư viện quảng cáo `ads/library`.
+     * **Bảng 2 (`FB_Ads_Creatives` - Cột F `Link Post / Reel FB (Tương tác)`):** Ghi chính xác link `story.php` / Reel cho từng creative để người dùng click vào là soi được tương tác ngay.
      * In log: `[SAVED] 💾 [<Tên Page>]: Đã upload thành công lên Google Sheet!`.
-  3. **Dọn dẹp Tab sau khi hoàn tất trọn vẹn:**
+  4. **Dọn dẹp Tab sau khi hoàn tất trọn vẹn:**
      * In log: `[INFO] 🗑️ Hoàn tất quy trình phân tích & upload cho [<Tên Page>]. Đóng tab #... để giải phóng bộ nhớ`.
-     * **Đóng tab này lại**, nghỉ ngẫu nhiên 2s-5s rồi mới sang Page tiếp theo.
+     * Đóng tab này lại, nghỉ ngẫu nhiên 2s-5s rồi mới sang Page tiếp theo.
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
-  * Dữ liệu xuất hiện đầy đủ trên cả 2 bảng Google Sheet không bị trùng lặp.
-  * Apps Script phản hồi 200 OK với `status: "SUCCESS"`.
+  * Cột F ở cả 2 bảng Google Sheet hiển thị link `https://www.facebook.com/story.php?story_fbid=...&id=...` hoặc `https://www.facebook.com/reel/...`.
+  * Click vào link mở ra bài post thật với đầy đủ like, comment, share, không bị link lỗi hoặc rơi về Ad Library chung chung.
 
 ---
 
@@ -280,23 +294,30 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
 
 ---
 
-### 🔹 SUITE 10: RÀ SOÁT MÃ NGUỒN CHUẨN ECC (RUNTIME & ERROR SAFETY)
+### 🔹 SUITE 10: RÀ SOÁT MÃ NGUỒN CHUẨN ECC (RUNTIME, SYNTAXERROR & AN TOÀN NẠP SCRIPT)
 
-* **Mục tiêu:** Quét toàn bộ codebase để đảm bảo không có lỗi `ReferenceError` ngầm (như `sleep is not defined`) và diệt sạch bẫy lỗi im lặng.
+* **Mục tiêu:** Quét toàn bộ codebase để đảm bảo không có lỗi `SyntaxError` khi nạp lại extension, không có `ReferenceError` ngầm và diệt sạch bẫy lỗi im lặng.
 * **Các bước thực hiện:**
-  1. Kiểm tra khai báo các hàm tiện ích thời gian:
+  1. **Kiểm tra chống lỗi SyntaxError do khai báo trùng lặp:**
+     * Toàn bộ các biến toàn cục trong `selectors.js` và `content_fb.js` (như `SELECTORS`, `FB_GRAPHQL_DOC_ID`) phải sử dụng từ khóa `var` kết hợp `globalThis` (`var SELECTORS = globalThis.SELECTORS || { ... }`).
+     * Tuyệt đối không dùng `const` hoặc `let` ở phạm vi ngoài cùng (top-level) trong các file content script được inject nhiều lần.
+  2. **Cơ chế ping `CHECK_READY` trong `injectContentScript`:**
+     * Trong `background.js`, hàm `injectContentScript` gửi message ping `{ type: 'CHECK_READY' }` đến tab trước.
+     * Nếu tab đã có content script đang chạy $\rightarrow$ bỏ qua không inject đè.
+     * Nếu chưa có $\rightarrow$ mới thực hiện `chrome.scripting.executeScript`.
+  3. **Kiểm tra khai báo các hàm tiện ích thời gian:**
      * `function sleep(ms)` phải được khai báo chuẩn trong cả `background.js` và `content_fb.js`.
      * `function sleepRandom(minSec, maxSec)` hoạt động chuẩn xác.
-  2. Kiểm tra an toàn cho Google Sheet Webhook trong [`Code.gs`](file:///f:/Clone-shopify/fb-ads-research-extension/Code.gs):
+  4. **Kiểm tra an toàn cho Google Sheet Webhook trong [`Code.gs`](file:///f:/Clone-shopify/fb-ads-research-extension/Code.gs):**
      * Biến `SPREADSHEET_ID` được gán ID chính xác `'186rhrVieyBJztWzKiDTwkf6Q-H3Zh8yWsfHgkfqQ28c'`.
      * Có khối kiểm tra an toàn `if (!ss)` trước khi gọi `getSheetByName`, ngăn ngừa 100% lỗi `Cannot read properties of null`.
-  3. Chạy bộ kiểm thử tự động:
+  5. **Chạy bộ kiểm thử tự động:**
      ```bash
      node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
      ```
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
   * **17/17 tiêu chí PASS 100%.**
-  * Số lượng catch block rỗng: **0**.
+  * Số lượng catch block rỗng: **0** (Zero empty catch blocks).
   * Cú pháp JavaScript hợp lệ (`node -c` không báo lỗi trên mọi file).
 
 ---
@@ -313,7 +334,7 @@ Khi phát hiện bất kỳ bài test nào bị **FAIL**:
     │  Tạo scratch test trong .ecc/ hoặc chạy dòng lệnh đơn để cô lập nguyên nhân
     ▼
 [BƯỚC 3: SỬA MÃ NGUỒN TẬN GỐC]
-    │  Chỉnh sửa file tương ứng (background.js / content_fb.js / popup.js / sidepanel.html / Code.gs)
+    │  Chỉnh sửa file tương ứng (background.js / content_fb.js / selectors.js / popup.js / Code.gs)
     │  TUYỆT ĐỐI KHÔNG dùng timeout bừa bãi hoặc try/catch che giấu lỗi
     ▼
 [BƯỚC 4: BỔ SUNG VÀO EVAL HARNESS]
@@ -333,9 +354,13 @@ Khi phát hiện bất kỳ bài test nào bị **FAIL**:
 - [ ] Giao diện chia tách mạch lạc: **🎯 Tiêu chuẩn sàng lọc (2 Cổng)** và **⚡ Thu thập & Vận hành (100% API)**.
 - [ ] Đã **xóa bỏ hoàn toàn ô "Tối đa lần cuộn"**, `Số lượng Page thu thập` mặc định là `⚡ Toàn bộ (Không giới hạn)`.
 - [ ] Tab Mẹ tìm kiếm từ khóa được giữ mở liên tục, **không bao giờ bị đóng** khi tìm kiếm xong.
+- [ ] Tự động làm sạch dấu ngoặc kép thừa trong từ khóa và chuẩn hóa enum `sortData.mode` cho GraphQL schema.
+- [ ] Tích hợp bộ **Fallback 4 Tầng thông minh**: Exact $\rightarrow$ Unordered $\rightarrow$ Bỏ lọc ngày $\rightarrow$ mediaType=all để không bao giờ bị 0 kết quả ngoài ý muốn.
 - [ ] Ghi chuẩn dòng log: `[INFO] 📋 Tìm thấy tất cả xxx Page hàng đầu cho "<từ khóa>"`.
 - [ ] Tab Con của từng Page được mở riêng; đóng ngay khi rớt Cổng 1 hoặc Cổng 2; giữ nguyên khi đạt chuẩn để crawl ads và upload Google Sheet.
-- [ ] Toàn bộ ads creatives (Video/Ảnh/CTA) được bóc tách và đồng bộ chuẩn xác lên 2 bảng Google Sheet (chuẩn AppSheet).
+- [ ] Trích xuất 100% chính xác link **Reel & Story Facebook (`story.php?story_fbid=...&id=...`)** từ CDN URL và `storyID` Base64 để soi lượt like, comment, share.
+- [ ] Đồng bộ Cột F ở cả 2 bảng Google Sheet: Cột F của `FB_Ads_Research` và `FB_Ads_Creatives` hiển thị link bài post thực tế thay vì link thư viện.
+- [ ] Tuyệt đối **không phát sinh SyntaxError** `Identifier has already been declared` khi nạp lại extension nhờ cơ chế ping `CHECK_READY` và `globalThis`.
 - [ ] Hàm `sleep(ms)` và `sleepRandom()` hoạt động trơn tru trong background, không phát sinh `sleep is not defined`.
 - [ ] Google Apps Script Webhook hoạt động ổn định với `SPREADSHEET_ID` chuẩn, không bị lỗi `getSheetByName`.
 - [ ] Bộ kiểm thử `.ecc/eval-harness.js` đạt điểm tuyệt đối **17/17 PASS**.
