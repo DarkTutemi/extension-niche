@@ -992,31 +992,37 @@ async function resolveCanonicalStoryFromReel(videoId, fallbackPageId) {
   };
 }
 
-async function getAdDetailsViaGraphQL(pageId) {
+async function getAdDetailsViaGraphQL(pageId, config = {}) {
+  const country = config.country || 'ALL';
+  const mediaType = (config.mediaType || 'ALL').toLowerCase();
+  const publisherPlatform = config.publisherPlatform ? config.publisherPlatform.toLowerCase() : null;
+  const platforms = (publisherPlatform && publisherPlatform !== 'all') ? [publisherPlatform.toUpperCase()] : [];
+  const targetCountry = country === 'ALL' ? 'US' : country;
+
   const variables = {
     activeStatus: 'active',
     adType: 'ALL',
     bylines: [],
     collationToken: null,
     contentLanguages: [],
-    countries: ['ALL'],
+    countries: targetCountry === 'ALL' ? ['US'] : [targetCountry],
     cursor: null,
     excludedIDs: null,
     first: 10,
     isTargetedCountry: false,
     location: null,
-    mediaType: 'all',
+    mediaType: mediaType,
     multiCountryFilterMode: null,
     pageIDs: [String(pageId)],
     potentialReachInput: null,
-    publisherPlatforms: [],
+    publisherPlatforms: platforms,
     queryString: '',
     regions: null,
     searchType: 'page',
     sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
     sortData: { direction: 'DESCENDING', mode: 'SORT_BY_TOTAL_IMPRESSIONS' },
     source: null,
-    startDate: { max: null, min: null },
+    startDate: config.startDateMin ? { min: config.startDateMin, max: null } : { max: null, min: null },
     v: 'e3d3df',
     viewAllPageID: String(pageId)
   };
@@ -1053,31 +1059,37 @@ async function getAdDetailsViaGraphQL(pageId) {
  * Bóc tách toàn bộ Ads Creatives của một Page qua Meta GraphQL API
  * Thu thập: Ad ID, Link đích sản phẩm, Link thư viện, Nút CTA (Mua ngay...), Dạng bài (Video/Image/Carousel), Link Post/Reel Facebook
  */
-async function extractAllAdsViaGraphQL(pageId, limit = 50) {
+async function extractAllAdsViaGraphQL(pageId, limit = 50, config = {}) {
+  const country = config.country || 'ALL';
+  const mediaType = (config.mediaType || 'ALL').toLowerCase();
+  const publisherPlatform = config.publisherPlatform ? config.publisherPlatform.toLowerCase() : null;
+  const platforms = (publisherPlatform && publisherPlatform !== 'all') ? [publisherPlatform.toUpperCase()] : [];
+  const targetCountry = country === 'ALL' ? 'US' : country;
+
   const variables = {
     activeStatus: 'active',
     adType: 'ALL',
     bylines: [],
     collationToken: null,
     contentLanguages: [],
-    countries: ['ALL'],
+    countries: targetCountry === 'ALL' ? ['US'] : [targetCountry],
     cursor: null,
     excludedIDs: null,
     first: Math.min(50, limit),
     isTargetedCountry: false,
     location: null,
-    mediaType: 'all',
+    mediaType: mediaType,
     multiCountryFilterMode: null,
     pageIDs: [String(pageId)],
     potentialReachInput: null,
-    publisherPlatforms: [],
+    publisherPlatforms: platforms,
     queryString: '',
     regions: null,
     searchType: 'page',
     sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
     sortData: { direction: 'DESCENDING', mode: 'SORT_BY_TOTAL_IMPRESSIONS' },
     source: null,
-    startDate: { max: null, min: null },
+    startDate: config.startDateMin ? { min: config.startDateMin, max: null } : { max: null, min: null },
     v: 'e3d3df',
     viewAllPageID: String(pageId)
   };
@@ -1162,32 +1174,38 @@ async function extractAllAdsViaGraphQL(pageId, limit = 50) {
   return { ads };
 }
 
-async function readPageAdCountViaGraphQL(pageId, status = 'active') {
+async function readPageAdCountViaGraphQL(pageId, status = 'active', config = {}) {
   const normStatus = (status || 'active').toLowerCase();
+  const country = config.country || 'ALL';
+  const mediaType = (config.mediaType || 'ALL').toLowerCase();
+  const publisherPlatform = config.publisherPlatform ? config.publisherPlatform.toLowerCase() : null;
+  const platforms = (publisherPlatform && publisherPlatform !== 'all') ? [publisherPlatform.toUpperCase()] : [];
+  const targetCountry = country === 'ALL' ? 'US' : country;
+
   const variables = {
     activeStatus: normStatus,
     adType: 'ALL',
     bylines: [],
     collationToken: null,
     contentLanguages: [],
-    countries: ['US'],
+    countries: targetCountry === 'ALL' ? ['US'] : [targetCountry],
     cursor: null,
     excludedIDs: null,
     first: 30,
     isTargetedCountry: false,
     location: null,
-    mediaType: 'all',
+    mediaType: mediaType,
     multiCountryFilterMode: null,
     pageIDs: [String(pageId)],
     potentialReachInput: null,
-    publisherPlatforms: [],
+    publisherPlatforms: platforms,
     queryString: '',
     regions: null,
     searchType: 'page',
     sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
     sortData: { direction: 'DESCENDING', mode: 'SORT_BY_TOTAL_IMPRESSIONS' },
     source: null,
-    startDate: { max: null, min: null },
+    startDate: config.startDateMin ? { min: config.startDateMin, max: null } : { max: null, min: null },
     v: 'e3d3df',
     viewAllPageID: String(pageId)
   };
@@ -1237,9 +1255,9 @@ function parseResultCountFromHtml(html) {
  * Tạo URL Thư viện quảng cáo theo đúng bộ lọc và trạng thái
  */
 function buildAdLibraryUrlForStatus(pageId, status, config = {}) {
-  const country = config.country || 'US';
-  const mediaType = config.mediaType || 'all';
-  const publisherPlatform = config.publisherPlatform || null;
+  const country = config.country || 'ALL';
+  const mediaType = (config.mediaType || 'ALL').toLowerCase();
+  const publisherPlatform = config.publisherPlatform ? config.publisherPlatform.toLowerCase() : null;
   const startDateMin = config.startDateMin || null;
 
   const params = new URLSearchParams({
@@ -1360,7 +1378,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // Ưu tiên 3: Thử truy vấn qua GraphQL nếu có trường count chuẩn
           if (payload && payload.pageId) {
             try {
-              const apiCount = await readPageAdCountViaGraphQL(payload.pageId, reqStatus);
+              const apiCount = await readPageAdCountViaGraphQL(payload.pageId, reqStatus, payload.config || {});
               if (apiCount && apiCount.status !== 'UNKNOWN') {
                 sendResponse({ ok: true, ...apiCount, source: 'GRAPHQL_API' });
                 return;
@@ -1387,10 +1405,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Lấy link bài post ads và website đích (Giai đoạn 3)
         case 'GET_AD_DETAILS': {
           const pageId = payload?.pageId;
+          const cfg = payload?.config || {};
           // Ưu tiên 1: Lấy siêu tốc qua Meta GraphQL nếu có pageId
           if (pageId) {
             try {
-              const gqlDetails = await getAdDetailsViaGraphQL(pageId);
+              const gqlDetails = await getAdDetailsViaGraphQL(pageId, cfg);
               if (gqlDetails && gqlDetails.websiteUrl) {
                 sendResponse({ ok: true, ...gqlDetails, source: 'GRAPHQL_API' });
                 return;
@@ -1410,12 +1429,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'GET_ALL_PAGE_ADS': {
           const pageId = payload?.pageId;
           const limit = payload?.limit || 30;
+          const cfg = payload?.config || {};
           if (!pageId) {
             sendResponse({ ok: false, error: 'Thiếu pageId' });
             return;
           }
           try {
-            const adsResult = await extractAllAdsViaGraphQL(pageId, limit);
+            const adsResult = await extractAllAdsViaGraphQL(pageId, limit, cfg);
             sendResponse({ ok: true, ads: adsResult.ads || [] });
           } catch (adsErr) {
             console.debug('[ContentFB] extractAllAds error:', adsErr.message);

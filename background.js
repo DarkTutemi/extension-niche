@@ -197,7 +197,7 @@ async function createTab(url, active = false) {
   const state = await loadState();
   const tabs = [...(state.tabsCreated || []), tab.id];
   await saveState({ tabsCreated: tabs });
-  await addLog(`📄 Mở tab #${tab.id}: ${url.substring(0, 80)}...`, 'INFO');
+  await addLog(`📄 Mở tab #${tab.id}: ${url}`, 'INFO');
   return tab;
 }
 
@@ -358,8 +358,8 @@ function buildKeywordUrl(keyword, country = 'ALL', config = {}) {
 function buildPageUrl(pageId, status, configOrCountry = {}) {
   const config = typeof configOrCountry === 'string' ? { country: configOrCountry } : (configOrCountry || {});
   const country = config.country || 'ALL';
-  const mediaType = config.mediaType || 'all';
-  const publisherPlatform = config.publisherPlatform || null;
+  const mediaType = (config.mediaType || 'ALL').toLowerCase();
+  const publisherPlatform = config.publisherPlatform ? config.publisherPlatform.toLowerCase() : null;
   const startDateMin = config.startDateMin || null;
 
   const params = new URLSearchParams({
@@ -702,11 +702,11 @@ async function readAdCountFromTab(tabId, pageId, status, config = {}) {
 /**
  * Trích xuất link quảng cáo & website đích từ tab cụ thể
  */
-async function getAdDetailsFromTab(tabId, pageId) {
+async function getAdDetailsFromTab(tabId, pageId, config = {}) {
   try {
     const resp = await sendMessageToTab(tabId, {
       type: 'GET_AD_DETAILS',
-      payload: { pageId }
+      payload: { pageId, config }
     }, 2);
     if (resp && resp.ok) {
       return {
@@ -837,7 +837,7 @@ async function processPage(pageIndex) {
 
     // Nếu chưa có websiteUrl từ bước cào danh sách hoặc postUrl còn là link Ad Library, trích xuất trực tiếp trên pageTab
     if (!websiteUrl || !postUrl || postUrl.includes('ads/library')) {
-      const adDetails = await getAdDetailsFromTab(pageTab.id, page.pageId);
+      const adDetails = await getAdDetailsFromTab(pageTab.id, page.pageId, pageConfig);
       if (adDetails && adDetails.websiteUrl) {
         websiteUrl = adDetails.websiteUrl;
         websiteUrlRaw = adDetails.websiteUrlRaw;
@@ -899,7 +899,7 @@ async function processPage(pageIndex) {
     try {
       const adsRes = await sendMessageToTab(pageTab.id, {
         type: 'GET_ALL_PAGE_ADS',
-        payload: { pageId: page.pageId, limit: 50 }
+        payload: { pageId: page.pageId, limit: 50, config: pageConfig }
       }, 2);
       if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
         state.pages[pageIndex].ads = adsRes.ads;
@@ -1080,7 +1080,7 @@ async function getAdDetails(pageId, config) {
   }
 
   // Ưu tiên 2: Fallback mở tab nền nếu không có tab Facebook active
-  const url = buildPageUrl(pageId, 'active', config.country || 'ALL');
+  const url = buildPageUrl(pageId, 'active', config);
   const active = config.tabType === 'foreground';
 
   let tab;

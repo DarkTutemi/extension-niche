@@ -241,6 +241,63 @@ jsFiles.forEach(file => {
 assert("Zero empty catch blocks found across codebase", emptyCatchFound, 0);
 
 // ----------------------------------------------------
+// Test Suite 7: URL Builder & Filter Normalization
+// ----------------------------------------------------
+console.log(`\n${BOLD}7. Testing Ad Library URL Builders & Filter Normalization${RESET}`);
+
+function buildPageUrlTest(pageId, status, configOrCountry = {}) {
+  const config = typeof configOrCountry === 'string' ? { country: configOrCountry } : (configOrCountry || {});
+  const country = config.country || 'ALL';
+  const mediaType = (config.mediaType || 'ALL').toLowerCase();
+  const publisherPlatform = config.publisherPlatform ? config.publisherPlatform.toLowerCase() : null;
+  const startDateMin = config.startDateMin || null;
+
+  const params = new URLSearchParams({
+    active_status: status,
+    ad_type: 'all',
+    country: country,
+    is_targeted_country: 'false',
+    media_type: mediaType,
+    search_type: 'page',
+    'sort_data[mode]': 'total_impressions',
+    'sort_data[direction]': 'desc',
+    source: 'page-transparency-widget',
+    view_all_page_id: String(pageId),
+  });
+
+  if (publisherPlatform && publisherPlatform !== 'all') {
+    params.set('publisher_platforms[0]', publisherPlatform);
+  }
+  if (startDateMin) {
+    params.set('start_date[min]', startDateMin);
+    params.set('start_date[max]', '');
+  }
+
+  return `https://www.facebook.com/ads/library/?${params.toString()}`;
+}
+
+const testUrl1 = buildPageUrlTest('1875448039341460', 'active', {
+  country: 'US',
+  mediaType: 'VIDEO',
+  publisherPlatform: 'FACEBOOK',
+  startDateMin: '2026-07-29'
+});
+
+assert("Normalizes mediaType from VIDEO to lowercase video in URL", testUrl1.includes('media_type=video'), true);
+assert("Normalizes publisherPlatform from FACEBOOK to lowercase facebook in URL", testUrl1.includes('publisher_platforms%5B0%5D=facebook'), true);
+assert("Encodes startDateMin accurately in URL", testUrl1.includes('start_date%5Bmin%5D=2026-07-29'), true);
+assert("Contains target view_all_page_id", testUrl1.includes('view_all_page_id=1875448039341460'), true);
+
+const testUrl2 = buildPageUrlTest('1875448039341460', 'active', {
+  country: 'US',
+  mediaType: 'ALL',
+  publisherPlatform: 'ALL'
+});
+
+assert("Omits publisher_platforms when publisherPlatform is ALL", testUrl2.includes('publisher_platforms'), false);
+assert("Sets media_type=all when mediaType is ALL", testUrl2.includes('media_type=all'), true);
+
+// ----------------------------------------------------
 // Summary
 // ----------------------------------------------------
 console.log(`\n${BOLD}----------------------------------------${RESET}`);
