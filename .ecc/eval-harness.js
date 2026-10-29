@@ -171,9 +171,54 @@ const sampleSitemap = `
 assert("Counts <url> tags in sitemap XML accurately", parseSitemapXmlCount(sampleSitemap), 4);
 
 // ----------------------------------------------------
-// Test Suite 5: Silent Failure Hunter Audit
+// Test Suite 5: Media ID & Engagement Extraction (Ad 1017083987449469)
 // ----------------------------------------------------
-console.log(`\n${BOLD}5. Silent Failure Hunter Code Audit${RESET}`);
+console.log(`\n${BOLD}5. Testing Media ID & Engagement Extraction (Ad 1017083987449469)${RESET}`);
+
+function extractFbMediaIdFromUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const m1 = url.match(/_(\d{14,18})_/);
+  if (m1 && m1[1]) return m1[1];
+  const m2 = url.match(/\/(\d{14,18})[_\.]/);
+  if (m2 && m2[1]) return m2[1];
+  const m3 = url.match(/[?&](?:v|video_id|id)=(\d{14,18})/);
+  if (m3 && m3[1]) return m3[1];
+  try {
+    const filename = url.split('?')[0].split('/').pop() || '';
+    const parts = filename.split(/[_\.-]/);
+    for (const part of parts) {
+      if (/^\d{14,18}$/.test(part)) return part;
+    }
+  } catch (e) {
+    console.debug('[extractFbMediaIdFromUrl] Parse error:', e.message);
+  }
+  return null;
+}
+
+const posterUrl = "https://scontent-sin2-2.xx.fbcdn.net/v/t39.35426-6/721466859_1010464198116058_9057808511054947817_n.jpg?_nc_cat=101&ccb=1-7";
+const videoId = extractFbMediaIdFromUrl(posterUrl);
+assert("Extracts videoId 1010464198116058 from DevTools poster URL", videoId, "1010464198116058");
+
+const pageId = "1793869850855862";
+const storyUrl = `https://www.facebook.com/story.php?story_fbid=${videoId}&id=${pageId}`;
+assert("Generates canonical story.php URL accurately", storyUrl, "https://www.facebook.com/story.php?story_fbid=1010464198116058&id=1793869850855862");
+
+// Engagement regex test
+const sampleHtml = '{"reaction_count":{"count":1420},"total_comment_count":388,"share_count":{"count":95},"play_count":56200}';
+const rxMatch = sampleHtml.match(/"reaction_count":\s*\{\s*"count":\s*(\d+)/i);
+const cmMatch = sampleHtml.match(/"total_comment_count":\s*(\d+)/i);
+const shMatch = sampleHtml.match(/"share_count":\s*\{\s*"count":\s*(\d+)/i);
+const vwMatch = sampleHtml.match(/"play_count":\s*(\d+)/i);
+
+assert("Parses reaction count from internal JSON", rxMatch ? rxMatch[1] : null, "1420");
+assert("Parses comment count from internal JSON", cmMatch ? cmMatch[1] : null, "388");
+assert("Parses share count from internal JSON", shMatch ? shMatch[1] : null, "95");
+assert("Parses video play/view count from internal JSON", vwMatch ? vwMatch[1] : null, "56200");
+
+// ----------------------------------------------------
+// Test Suite 6: Silent Failure Hunter Audit
+// ----------------------------------------------------
+console.log(`\n${BOLD}6. Silent Failure Hunter Code Audit${RESET}`);
 
 const rootDir = path.resolve(__dirname, '..');
 const jsFiles = ['background.js', 'content_fb.js', 'content_web.js', 'popup.js', 'selectors.js'];

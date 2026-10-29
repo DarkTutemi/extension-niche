@@ -1365,13 +1365,18 @@ async function writeToSheet(pageIndex) {
     return;
   }
 
-  // Đảm bảo lấy link Reel / Post FB thực tế nhất thay vì link Thư viện quảng cáo
+  // Đảm bảo lấy link Story / Reel / Post FB thực tế nhất thay vì link Thư viện quảng cáo
   let bestPostLink = page.postUrl || '';
+  let bestEngagement = page.engagement || null;
   if ((!bestPostLink || bestPostLink.includes('ads/library')) && page.ads && page.ads.length > 0) {
-    const candidate = page.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'))
-                   || page.ads.find(a => a.reelUrl || a.storyUrl);
+    const candidate = page.ads.find(a => a.storyUrl)
+                   || page.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'))
+                   || page.ads.find(a => a.reelUrl);
     if (candidate) {
-      bestPostLink = candidate.fbPostUrl || candidate.reelUrl || candidate.storyUrl || bestPostLink;
+      bestPostLink = candidate.storyUrl || candidate.fbPostUrl || candidate.reelUrl || bestPostLink;
+      if (candidate.engagement) {
+        bestEngagement = candidate.engagement;
+      }
     }
   }
 
@@ -1384,6 +1389,10 @@ async function writeToSheet(pageIndex) {
       pageId: page.pageId,
       pageName: page.pageName,
       postUrl: bestPostLink,
+      reactions: bestEngagement?.reactions || '',
+      comments: bestEngagement?.comments || '',
+      shares: bestEngagement?.shares || '',
+      views: bestEngagement?.views || '',
       websiteUrl: page.websiteUrl || '',
       activeCount: page.activeCount,
       inactiveCount: page.inactiveCount,

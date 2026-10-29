@@ -869,7 +869,7 @@ function resolveCreativePostUrl(item = {}, snap = {}, pageId = null) {
  */
 function findCardElementByAdId(adId) {
   if (!document.body) return null;
-  const cards = Array.from(document.querySelectorAll('div[class*="x1plvlek"], div[class*="x1cy8zhl"], div[role="region"]'));
+  const cards = Array.from(document.querySelectorAll('div[role="dialog"], div[class*="x1plvlek"], div[class*="x1cy8zhl"], div[role="region"], div[data-testid*="ad"]'));
   return cards.find(c => (c.innerText || '').includes(String(adId))) || null;
 }
 
@@ -884,11 +884,22 @@ function extractPostUrlFromCardDom(cardEl, pageId) {
   const video = cardEl.querySelector('video');
   if (video) {
     const src = video.currentSrc || video.src || '';
-    const vid = extractFbMediaIdFromUrl(src);
+    const poster = video.getAttribute('poster') || video.poster || '';
+    const vid = extractFbMediaIdFromUrl(src) || extractFbMediaIdFromUrl(poster);
     if (vid) {
       return pageId ? `https://www.facebook.com/story.php?story_fbid=${vid}&id=${pageId}` : `https://www.facebook.com/reel/${vid}`;
     }
   }
+
+  const img = cardEl.querySelector('img[src*="fbcdn.net"], img[src*="scontent"]');
+  if (img) {
+    const isrc = img.currentSrc || img.src || '';
+    const iid = extractFbMediaIdFromUrl(isrc);
+    if (iid) {
+      return pageId ? `https://www.facebook.com/story.php?story_fbid=${iid}&id=${pageId}` : `https://www.facebook.com/photo/?fbid=${iid}`;
+    }
+  }
+
   return null;
 }
 
@@ -897,62 +908,88 @@ function extractPostUrlFromCardDom(cardEl, pageId) {
  * Áp dụng giải thuật bóc tách HTML nội bộ với credentials: "include":
  * 1. Decode base64 storyID (format: S:_I<pageId>:<postId>)
  * 2. Match top_level_post_id và content_owner_id_new
+ * 3. Trích xuất chỉ số tương tác: reactions, comments, shares, views
  */
 async function resolveCanonicalStoryFromReel(videoId, fallbackPageId) {
   if (!videoId) return null;
+  let engagement = { reactions: '0', comments: '0', shares: '0', views: '0' };
+  let post = null;
+  let page = null;
   try {
     const res = await fetch(`https://www.facebook.com/reel/${videoId}`, {
       credentials: 'include',
       headers: { Accept: 'text/html,application/xhtml+xml' }
     });
-    if (!res.ok) return null;
-    const h = await res.text();
+    if (res.ok) {
+      const h = await res.text();
 
-    let post = null;
-    let page = null;
-
-    // 1. Decode storyID base64 (chuẩn bài đăng chính thức của Facebook)
-    const storyIdMatches = [...h.matchAll(/"storyID":"([A-Za-z0-9+/=]+)"/g)];
-    for (const sm of storyIdMatches) {
-      try {
-        const decoded = atob(sm[1]);
-        if (/^S:_I\d+:/.test(decoded)) {
-          const parts = decoded.split(':');
-          page = parts[1].slice(2);
-          post = parts.slice(2).find(x => /^\d+$/.test(x));
-          if (page && post) break;
-        }
-      } catch (e) {
-        console.debug('[resolveCanonicalStoryFromReel] base64 decode notice:', e.message);
-      }
-    }
-
-    // 2. Parse top_level_post_id & content_owner_id_new
-    if (!post || !page) {
-      const topMatches = [...h.matchAll(/\\*"top_level_post_id\\*":\\*"(\d+)\\*",\\*"content_owner_id_new\\*":\\*"?(\d+)([^]{0,400})/g)];
-      for (const tm of topMatches) {
-        const pId = tm[1];
-        const cId = tm[2];
-        const vIdMatch = tm[3].match(/video_id\\*":\\*"?(\d+)/);
-        const vId = vIdMatch ? vIdMatch[1] : null;
-        if (!vId || vId === String(videoId) || pId === String(videoId)) {
-          post = pId;
-          page = cId;
-          break;
+      // 1. Decode storyID base64 (chuẩn bài đăng chính thức của Facebook)
+      const storyIdMatches = [...h.matchAll(/"storyID":"([A-Za-z0-9+/=]+)"/g)];
+      for (const sm of storyIdMatches) {
+        try {
+          const decoded = atob(sm[1]);
+          if (/^S:_I\d+:/.test(decoded)) {
+            const parts = decoded.split(':');
+            page = parts[1].slice(2);
+            post = parts.slice(2).find(x => /^\d+$/.test(x));
+            if (page && post) break;
+          }
+        } catch (e) {
+          console.debug('[resolveCanonicalStoryFromReel] base64 decode notice:', e.message);
         }
       }
-    }
 
-    const finalPost = post || videoId;
-    const finalPage = page || fallbackPageId;
+      // 2. Parse top_level_post_id & content_owner_id_new
+      if (!post || !page) {
+        const topMatches = [...h.matchAll(/\\*"top_level_post_id\\*":\\*"(\d+)\\*",\\*"content_owner_id_new\\*":\\*"?(\d+)([^]{0,400})/g)];
+        for (const tm of topMatches) {
+          const pId = tm[1];
+          const cId = tm[2];
+          const vIdMatch = tm[3].match(/video_id\\*":\\*"?(\d+)/);
+          const vId = vIdMatch ? vIdMatch[1] : null;
+          if (!vId || vId === String(videoId) || pId === String(videoId)) {
+            post = pId;
+            page = cId;
+            break;
+          }
+        }
+      }
 
-    if (finalPost && finalPage) {
-      return `https://www.facebook.com/story.php?story_fbid=${finalPost}&id=${finalPage}`;
+      // 3. Trích xuất chỉ số tương tác (Likes, Comments, Shares, Views)
+      const rxMatch = h.match(/"reaction_count":\s*\{\s*"count":\s*(\d+)/i) || 
+                      h.match(/"i18n_reaction_count":\s*"([^"]+)"/i) ||
+                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:lượt thích|reactions|likes)/i);
+      if (rxMatch) engagement.reactions = String(rxMatch[1]);
+
+      const cmMatch = h.match(/"total_comment_count":\s*(\d+)/i) ||
+                      h.match(/"comment_count":\s*\{\s*"total_count":\s*(\d+)/i) ||
+                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:bình luận|comments)/i);
+      if (cmMatch) engagement.comments = String(cmMatch[1]);
+
+      const shMatch = h.match(/"share_count":\s*\{\s*"count":\s*(\d+)/i) ||
+                      h.match(/"share_count_reduced":\s*"([^"]+)"/i) ||
+                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:lượt chia sẻ|shares)/i);
+      if (shMatch) engagement.shares = String(shMatch[1]);
+
+      const vwMatch = h.match(/"play_count":\s*(\d+)/i) ||
+                      h.match(/"video_view_count":\s*(\d+)/i) ||
+                      h.match(/(\d+(?:\.\d+)?[KMB]?)\s*(?:lượt xem|views|plays)/i);
+      if (vwMatch) engagement.views = String(vwMatch[1]);
     }
   } catch (err) {
     console.debug('[ContentFB] resolveCanonicalStoryFromReel notice:', err.message);
   }
-  return fallbackPageId ? `https://www.facebook.com/story.php?story_fbid=${videoId}&id=${fallbackPageId}` : `https://www.facebook.com/reel/${videoId}`;
+
+  const finalPost = post || videoId;
+  const finalPage = page || fallbackPageId;
+  const storyUrl = finalPage ? `https://www.facebook.com/story.php?story_fbid=${finalPost}&id=${finalPage}` : `https://www.facebook.com/reel/${videoId}`;
+
+  return {
+    storyUrl,
+    post: finalPost,
+    page: finalPage,
+    engagement
+  };
 }
 
 async function getAdDetailsViaGraphQL(pageId) {
@@ -1099,8 +1136,26 @@ async function extractAllAdsViaGraphQL(pageId, limit = 50) {
         body: snap.body?.text || '',
         caption: snap.caption || '',
         creationTime: snap.creation_time || null,
-        videoId: postInfo.videoId
+        videoId: postInfo.videoId,
+        engagement: null
       });
+    }
+  }
+
+  // Cố gắng giải mã canonical story URL & engagement cho bài video nổi bật đầu tiên
+  for (let i = 0; i < Math.min(ads.length, 3); i++) {
+    const a = ads[i];
+    if (a.videoId) {
+      try {
+        const canRes = await resolveCanonicalStoryFromReel(a.videoId, pageId);
+        if (canRes && canRes.storyUrl) {
+          a.storyUrl = canRes.storyUrl;
+          a.fbPostUrl = canRes.storyUrl;
+          a.engagement = canRes.engagement;
+        }
+      } catch (e) {
+        console.debug('[extractAllAdsViaGraphQL] Resolve reel notice:', e.message);
+      }
     }
   }
 
@@ -1270,6 +1325,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Kiểm tra chặn đơn thuần
         case 'CHECK_BLOCKED': {
           sendResponse({ ok: true, ...blockCheck });
+          break;
+        }
+
+        // Bóc tách canonical Story URL và chỉ số tương tác (Likes, Comments, Shares, Views)
+        case 'RESOLVE_POST_ENGAGEMENT': {
+          const videoId = payload?.videoId;
+          const fallbackPageId = payload?.pageId;
+          if (!videoId) {
+            sendResponse({ ok: false, error: 'Thiếu videoId' });
+            return;
+          }
+          try {
+            const result = await resolveCanonicalStoryFromReel(videoId, fallbackPageId);
+            sendResponse({ ok: true, data: result });
+          } catch (resErr) {
+            console.debug('[ContentFB] RESOLVE_POST_ENGAGEMENT error:', resErr.message);
+            sendResponse({ ok: false, error: resErr.message });
+          }
           break;
         }
 
