@@ -50,7 +50,7 @@ Một tính năng chỉ được chứng nhận **ĐẠT (PASS)** khi thỏa mã
 
 ### 2.2. Khởi tạo phiên kiểm thử:
 ```bash
-# 1. Chạy bộ đánh giá kiểm tra cú pháp và logic ban đầu (yêu cầu 29/29 PASS)
+# 1. Chạy bộ đánh giá kiểm tra cú pháp và logic ban đầu (yêu cầu 32/32 PASS)
 node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
 
 # 2. Khởi động máy chủ cục bộ phục vụ kiểm thử Side Panel / Popup
@@ -327,7 +327,7 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
      node f:/Clone-shopify/fb-ads-research-extension/.ecc/eval-harness.js
      ```
 * **Tiêu chuẩn nghiệm thu (Pass Criteria):**
-  * **29/29 tiêu chí PASS 100%.**
+  * **32/32 tiêu chí PASS 100%.**
   * Số lượng catch block rỗng: **0** (Zero empty catch blocks).
   * Cú pháp JavaScript hợp lệ (`node -c` không báo lỗi trên mọi file).
 
@@ -352,7 +352,7 @@ Khi phát hiện bất kỳ bài test nào bị **FAIL**:
     │  Thêm test case gây lỗi vào .ecc/eval-harness.js để chống tái phát (Regression Guard)
     ▼
 [BƯỚC 5: KIỂM TRA HỒI QUY TOÀN BỘ]
-    │  Chạy lại node .ecc/eval-harness.js đảm bảo 29/29 tests đều PASS
+    │  Chạy lại node .ecc/eval-harness.js đảm bảo 32/32 tests đều PASS
     ▼
 [BƯỚC 6: COMMIT, PUSH GIT VÀ BÁO CÁO MINH CHỨNG]
 ```
@@ -378,4 +378,4 @@ Khi phát hiện bất kỳ bài test nào bị **FAIL**:
 - [ ] Tuyệt đối **không phát sinh SyntaxError** `Identifier has already been declared` khi nạp lại extension nhờ cơ chế ping `CHECK_READY` và `globalThis`.
 - [ ] Hàm `sleep(ms)` và `sleepRandom()` hoạt động trơn tru trong background, không phát sinh `sleep is not defined`.
 - [ ] Google Apps Script Webhook hoạt động ổn định với `SPREADSHEET_ID` chuẩn, không bị lỗi `getSheetByName`.
-- [ ] Bộ kiểm thử `.ecc/eval-harness.js` đạt điểm tuyệt đối **29/29 PASS**.
+- [ ] Bộ kiểm thử `.ecc/eval-harness.js` đạt điểm tuyệt đối **32/32 PASS**.

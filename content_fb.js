@@ -101,31 +101,18 @@ function parseResultCount(text) {
  * Tìm phần tử hiển thị tổng số kết quả trên trang
  */
 function extractAdCountFromPage() {
-  // Ưu tiên 1: div[role="heading"][aria-level="3"]
-  const headings = Array.from(document.querySelectorAll('div[role="heading"][aria-level="3"], h3, span, div'));
+  // Ưu tiên 1: div[role="heading"][aria-level="3"] hoặc h3 (Selector chuẩn của Meta Ad Library)
+  // Dùng innerText để các text node con được phân tách bằng khoảng trắng, tránh lỗi ghép số (vd: ~91 + 0 -> 910)
+  const headings = Array.from(document.querySelectorAll('div[role="heading"][aria-level="3"], h3'));
   for (const el of headings) {
-    if (el.children.length === 0 || el.children.length === 1) {
-      const text = el.textContent.trim();
-      const count = parseResultCount(text);
-      if (count !== null) {
-        return { count, rawText: text, status: count === 0 ? 'ZERO' : 'OK' };
-      }
-    }
-  }
-
-  // Ưu tiên 2: Duyệt toàn bộ text nodes khớp regex
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  let node;
-  while ((node = walker.nextNode())) {
-    const text = node.nodeValue.trim();
+    const text = (el.innerText || el.textContent || '').trim();
     const count = parseResultCount(text);
     if (count !== null) {
       return { count, rawText: text, status: count === 0 ? 'ZERO' : 'OK' };
     }
   }
 
-  // Kiểm tra xem có phải thông báo không tìm thấy kết quả nào không
-  const bodyText = (document.body ? document.body.innerText : '').toLowerCase();
+  // Ưu tiên 2: Thông báo không tìm thấy kết quả (Empty State) trên thẻ heading cấp 2
   const zeroPhrases = (typeof SELECTORS !== 'undefined' && SELECTORS.pageResultCount?.zeroPhrases) || [
     'không có kết quả',
     'no results',
@@ -137,6 +124,27 @@ function extractAdCountFromPage() {
     'there are no ads to show',
     'no ads found',
   ];
+  const emptyHeadings = Array.from(document.querySelectorAll('div[role="heading"][aria-level="2"], h2'));
+  for (const el of emptyHeadings) {
+    const text = (el.innerText || el.textContent || '').toLowerCase().trim();
+    if (zeroPhrases.some(phrase => text.includes(phrase))) {
+      return { count: 0, rawText: text, status: 'ZERO' };
+    }
+  }
+
+  // Ưu tiên 3: Duyệt toàn bộ text nodes khớp regex
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    const text = (node.nodeValue || '').trim();
+    const count = parseResultCount(text);
+    if (count !== null) {
+      return { count, rawText: text, status: count === 0 ? 'ZERO' : 'OK' };
+    }
+  }
+
+  // Ưu tiên 4: Kiểm tra toàn bộ bodyText nếu có thông báo rỗng
+  const bodyText = (document.body ? (document.body.innerText || document.body.textContent || '') : '').toLowerCase();
   if (zeroPhrases.some(phrase => bodyText.includes(phrase))) {
     return { count: 0, rawText: '0 results', status: 'ZERO' };
   }
@@ -1388,15 +1396,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
-          // Nếu yêu cầu đếm 'inactive' mà tab hiện tại đang mở trang 'active':
-          // Facebook Ad Library không lưu trữ inactive ads cho các store thương mại (mặc định là 0).
-          // TUYỆT ĐỐI KHÔNG đọc DOM của trang active làm fallback vì sẽ gây lỗi active=inactive -> ratio=50%!
-          if (reqStatus === 'inactive') {
-            sendResponse({ ok: true, count: 0, status: 'ZERO', rawText: '0 ads (inactive)', source: 'INACTIVE_DEFAULT' });
+          // Kiểm tra xem tab hiện tại có đang hiển thị đúng active_status mà payload yêu cầu không
+          const currentUrl = (typeof window !== 'undefined' && window.location?.href) ? window.location.href : '';
+          const isCurrentActive = currentUrl.includes('active_status=active');
+          const isCurrentInactive = currentUrl.includes('active_status=inactive');
+
+          if (reqStatus === 'inactive' && isCurrentActive) {
+            // Tab hiện tại đang mở active ads. TUYỆT ĐỐI không đọc DOM của active làm inactive!
+            // Cũng KHÔNG được gán mặc định là 0 vì store có thể có hàng ngàn inactive ads!
+            // Trả về UNKNOWN để background mở tab helper kiểm tra DOM trang inactive thực tế.
+            sendResponse({ ok: false, count: null, status: 'UNKNOWN', reason: 'TAB_ACTIVE_CANNOT_READ_INACTIVE' });
             return;
           }
 
-          // Fallback cuối cùng cho active: đọc DOM hiện tại
+          if (reqStatus === 'active' && isCurrentInactive) {
+            sendResponse({ ok: false, count: null, status: 'UNKNOWN', reason: 'TAB_INACTIVE_CANNOT_READ_ACTIVE' });
+            return;
+          }
+
+          // Fallback cuối cùng: đọc DOM hiện tại khi tab đang hiển thị đúng trạng thái tương ứng
           let countRes = extractAdCountFromPage();
           sendResponse({ ok: true, ...countRes, source: 'DOM_FALLBACK' });
           break;

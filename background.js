@@ -763,9 +763,15 @@ async function processPage(pageIndex) {
     await addLog(`📑 Mở tab mới #${pageTab.id} lọc theo Page: [${page.pageName}] (Page ID: ${page.pageId})`, 'INFO');
     await addLog(`🔒 Giữ tab #${pageTab.id} để kiểm định Cổng 1 (Active Ratio)...`, 'INFO');
 
-    // ── BƯỚC 2: Kiểm định Cổng 1 (Active Ratio >= 70%) trên tab này ──
+    // ── BƯỚC 2: Kiểm định Cổng 1 (Active Ratio >= 70%) ──
     const activeResult = await readAdCountFromTab(pageTab.id, page.pageId, 'active', pageConfig);
-    const inactiveResult = await readAdCountFromTab(pageTab.id, page.pageId, 'inactive', pageConfig);
+    let inactiveResult = { count: 0, status: 'ZERO' };
+    if (activeResult && activeResult.status === 'OK' && typeof activeResult.count === 'number' && activeResult.count > 0) {
+      await addLog(`🔍 Đang kiểm tra quảng cáo không hoạt động (Inactive Ads) cho [${page.pageName}]...`, 'INFO');
+      inactiveResult = await readAdCount(page.pageId, 'inactive', state.country, pageConfig);
+    } else if (activeResult && activeResult.status === 'UNKNOWN') {
+      inactiveResult = { count: null, status: 'UNKNOWN' };
+    }
 
     state = await loadState();
     state.pages[pageIndex].activeCount  = activeResult.count;

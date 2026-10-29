@@ -114,7 +114,8 @@ Trong quá trình kiểm thử thực tế với các từ khóa ngách Beauty, 
 Hệ thống đã quét qua 10 từ khóa ngách Car (`magnetic phone mount`, `car wax`, `windshield sun shade`, `car vacuum cleaner`, `car cleaning kit`, `dash cam`, `car air freshener`, `car seat cover`, `steering wheel cover`, `car wash foam`), rà soát 126 Fanpage và phát hiện **27 WINNER STORES**, bóc tách **74 Ads Creatives** đồng bộ đồng thời lên 2 bảng Google Sheet:
 - **Mob Armor** (`magnetic phone mount`): 100% active (30/30), 69 SP, 8 Video Ads.
 - **Seat Cover Solutions** (`steering wheel cover`): 100% active (24/24), 22 SP, 16 Video Ads.
-- **WolfBox** (`dash cam`): 100% active (29/29), 163 SP, 9 Video Ads.
+- **WolfBox** (`dash cam`): 100% active, 163 SP, 9 Video Ads.
+- **Viqzes.store** (`Viqzes.store`): 91 active, 3200 inactive -> ratio 2.8% < 70% (Chính xác SKIP Cổng 1, không vượt rào giả mạo).
 - **Chemical Guys** (`car cleaning kit` & `car wash foam`): 100% active (25/25), 250 SP, 4 Video Ads.
 - **Redtiger Dash Cam** (`dash cam`): 100% active (20/20), 166 SP, 4 Video Ads.
 - **Coverland Car & Seat Covers** (`car seat cover`): 100% active (30/30), 6.633 SP, 1 Video Ad.
@@ -139,7 +140,7 @@ fb-ads-research-extension/
 ├── Code.gs                    # Mã nguồn Google Apps Script Webhook tiếp nhận dữ liệu ghi vào Google Sheets
 ├── TEST_PROMPT.md             # Kịch bản kiểm thử toàn diện đa tầng (Visual, DOM, API, Logfile, ECC)
 ├── README.md                  # Tài liệu hướng dẫn kỹ thuật & logic vận hành chi tiết
-├── .ecc/                      # Bộ công cụ kiểm thử tự động eval-harness.js (29/29 Passed)
+├── .ecc/                      # Bộ công cụ kiểm thử tự động eval-harness.js (32/32 Passed)
 ├── icons/                     # Bộ icon đại diện của tiện ích (16px, 48px, 128px)
 ├── reports/                   # Thư mục lưu trữ các báo cáo kiểm chuẩn chi tiết
 │   ├── TEST_REPORT_CAR_10_KEYWORDS.md # Báo cáo kiểm định 10 từ khóa ngách Car (27 Winners, 74 Creatives)

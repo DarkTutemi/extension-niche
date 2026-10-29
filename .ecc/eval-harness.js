@@ -51,6 +51,8 @@ function parseResultCount(text) {
 }
 
 assert("Parses standard Vietnamese result count (~86 kết quả)", parseResultCount("~86 kết quả"), 86);
+assert("Parses exact 91 results from Vietnamese Facebook Ad Library (~91 kết quả)", parseResultCount("~91 kết quả"), 91);
+assert("Parses thousand dot separator (~3.200 kết quả for inactive ads)", parseResultCount("~3.200 kết quả"), 3200);
 assert("Parses thousand dot separator (~31.000 kết quả)", parseResultCount("~31.000 kết quả"), 31000);
 assert("Parses thousand comma separator (~1,250 results)", parseResultCount("~1,250 results"), 1250);
 assert("Parses plain number without tilde (15 results)", parseResultCount("15 results"), 15);
@@ -134,6 +136,12 @@ assert(
   "Skips when active ratio is below threshold (3 active, 7 inactive < 70%)",
   evaluateRatio(3, 7),
   { passed: false, status: 'SKIP_RATIO', ratio: 0.3 }
+);
+
+assert(
+  "Skips Viqzes.store accurately (91 active, 3200 inactive -> ratio 2.76% < 70%)",
+  evaluateRatio(91, 3200),
+  { passed: false, status: 'SKIP_RATIO', ratio: 0.03 }
 );
 
 assert(
