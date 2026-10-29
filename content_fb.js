@@ -435,7 +435,8 @@ function extractFbAuthTokens() {
         const m = text.match(/"DTSGInitialData"[^}]*"token":"([^"]+)"/) ||
                   text.match(/\["DTSGInitialData",\[\],\{"token":"([^"]+)"\}/) ||
                   text.match(/"DTSGInitData":\{"token":"([^"]+)"/) ||
-                  text.match(/"token":"(NAf[^"]+)"/);
+                  text.match(/"token":"(NAf[^"]+)"/) ||
+                  text.match(/"token":"([A-Za-z0-9_-]{15,}:[0-9]+:[0-9]+)"/);
         if (m) fb_dtsg = m[1];
       }
       if (!lsd) {
@@ -445,7 +446,7 @@ function extractFbAuthTokens() {
         if (m) lsd = m[1];
       }
       if (!userId) {
-        const m = text.match(/"USER_ID":"(\d+)"/);
+        const m = text.match(/"USER_ID":"(\d+)"/) || text.match(/"actorID":"(\d+)"/);
         if (m) userId = m[1];
       }
     }
@@ -519,13 +520,18 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
   }
   if (!queryKeyword) return { pages: [] };
 
+  const cleanKw = (queryKeyword || '').replace(/^["']+|["']+$/g, '').trim();
   const isExact = (config.searchType === 'KEYWORD_EXACT_PHRASE');
-  let queryStr = isExact ? `"${queryKeyword}"` : queryKeyword;
+  let queryStr = isExact ? `"${cleanKw}"` : cleanKw;
   let activeSearchType = config.searchType || 'KEYWORD_UNORDERED';
   const targetCountry = country === 'ALL' ? 'US' : country;
   const targetMax = (maxPages && Number(maxPages) > 0) ? Number(maxPages) : 0;
 
-  const buildVariables = (q, sType, cursor = null) => ({
+  // Đảm bảo enum sortData.mode luôn hợp lệ trong GraphQL schema (Meta chỉ cho phép TOTAL_IMPRESSIONS hoặc RELEVANCY)
+  const validSortModes = ['SORT_BY_TOTAL_IMPRESSIONS', 'SORT_BY_RELEVANCY_MONTHLY_GROUPED'];
+  const gqlSortMode = validSortModes.includes(config.sortMode) ? config.sortMode : 'SORT_BY_TOTAL_IMPRESSIONS';
+
+  const buildVariables = (q, sType, cursor = null, ignoreDate = false) => ({
     activeStatus: 'active',
     adType: 'ALL',
     bylines: [],
@@ -548,10 +554,10 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
     sessionID: '0f73ce97-0776-429c-9e41-557b4668922c',
     sortData: {
       direction: 'DESCENDING',
-      mode: config.sortMode || 'SORT_BY_TOTAL_IMPRESSIONS'
+      mode: gqlSortMode
     },
     source: null,
-    startDate: config.startDateMin ? { min: config.startDateMin, max: null } : null,
+    startDate: (!ignoreDate && config.startDateMin) ? { min: config.startDateMin, max: null } : null,
     v: 'e3d3df',
     viewAllPageID: '0'
   });
@@ -620,10 +626,30 @@ async function crawlPagesViaGraphQL({ keyword, country = 'US', config = {}, maxP
   let edges = conn?.edges || [];
   let pageInfo = conn?.page_info;
 
-  // Fallback thông minh: nếu tìm kiếm Exact Phrase trả về 0 kết quả, tự động thử lại dạng Unordered
+  // Fallback 1: Nếu Exact Phrase trả về 0 kết quả, tự động thử lại dạng Unordered
   if (edges.length === 0 && isExact) {
     console.debug('[ContentFB] Exact phrase trả về 0 kết quả, chuyển sang tìm kiếm từ khóa mở rộng...');
-    json = await callMetaGraphQL(buildVariables(queryKeyword, 'KEYWORD_UNORDERED'));
+    json = await callMetaGraphQL(buildVariables(cleanKw, 'KEYWORD_UNORDERED'));
+    conn = json.data?.ad_library_main?.search_results_connection;
+    edges = conn?.edges || [];
+    pageInfo = conn?.page_info;
+  }
+
+  // Fallback 2: Nếu có bộ lọc startDateMin làm mất kết quả, thử lại all-time
+  if (edges.length === 0 && config.startDateMin) {
+    console.debug('[ContentFB] 0 kết quả với bộ lọc ngày, thử lại không giới hạn ngày (all-time)...');
+    json = await callMetaGraphQL(buildVariables(cleanKw, 'KEYWORD_UNORDERED', null, true));
+    conn = json.data?.ad_library_main?.search_results_connection;
+    edges = conn?.edges || [];
+    pageInfo = conn?.page_info;
+  }
+
+  // Fallback 3: Nếu mediaType làm mất kết quả, thử lại mediaType = 'all'
+  if (edges.length === 0 && config.mediaType && config.mediaType.toLowerCase() !== 'all') {
+    console.debug('[ContentFB] 0 kết quả với mediaType, thử lại mediaType=all...');
+    const allMediaVars = buildVariables(cleanKw, 'KEYWORD_UNORDERED', null, true);
+    allMediaVars.mediaType = 'all';
+    json = await callMetaGraphQL(allMediaVars);
     conn = json.data?.ad_library_main?.search_results_connection;
     edges = conn?.edges || [];
     pageInfo = conn?.page_info;
