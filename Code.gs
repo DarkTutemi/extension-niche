@@ -51,6 +51,7 @@ const CREATIVE_HEADERS = [
   'Tên Page',
   'Ad ID',
   'Dạng bài (Media)',
+  'Link Post / Reel FB (Tương tác)',
   'Nút CTA',
   'Loại CTA',
   'Link Sản Phẩm (Ads URL)',
@@ -311,12 +312,14 @@ function doPost(e) {
         if (!adIdStr) continue;
 
         const existingRow = existingAdMap.get(adIdStr);
+        const fbPostLink = ad.fbPostUrl || ad.reelUrl || ad.storyUrl || '';
         const rowData = [
           existingRow || (cLastRow + newRows.length + 1),
           "'" + String(data.pageId),
           data.pageName || '',
           "'" + adIdStr,
           ad.mediaFormat || (ad.videos?.length ? 'VIDEO' : 'IMAGE'), // VIDEO / IMAGE / CAROUSEL
+          fbPostLink,                                                // Link Post / Reel FB (Tương tác, Like, Comment)
           ad.ctaText || 'Mua ngay',                                  // Nút CTA: Mua ngay, Đăng ký...
           ad.ctaType || 'SHOP_NOW',                                  // Mã CTA: SHOP_NOW, SIGN_UP...
           ad.destinationUrl || ad.linkUrl || '',                     // Link sản phẩm (Ads URL)

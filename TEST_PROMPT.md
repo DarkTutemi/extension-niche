@@ -222,8 +222,8 @@ python -m http.server 8089 --directory f:\Clone-shopify\fb-ads-research-extensio
 * **Các bước thực hiện:**
   1. **Crawl toàn bộ Ads Creatives qua API:**
      * In log: `[INFO] 🎬 Đang crawl toàn bộ quảng cáo kèm CTA của Page [<Tên Page>] qua API trên tab #......`.
-     * Bóc tách các trường: Dạng bài (`VIDEO`/`IMAGE`/`CAROUSEL`), Nút CTA (`SHOP_NOW`, `GET_OFFER`...), Link sản phẩm sạch.
-     * In log: `[INFO] 📦 Đã bóc tách thành công X ads creative (Video/Image/CTA) cho [<Tên Page>]`.
+     * Bóc tách các trường: Dạng bài (`VIDEO`/`IMAGE`/`CAROUSEL`), **Link bài Post / Reel thực tế trên Facebook (`story.php?story_fbid=...&id=...` hoặc `reel/...` để soi tương tác: like, comment, share)**, Nút CTA (`SHOP_NOW`, `GET_OFFER`...), Link sản phẩm sạch.
+     * In log: `[INFO] 📦 Đã bóc tách thành công X ads creative (Y Video/Reel links, Z Images/Carousels) cho [<Tên Page>]`.
   2. **Upload Google Sheets & AppSheet:**
      * In log: `[INFO] 📤 Đang upload dữ liệu Store và X ads creative lên Google Sheet...`.
      * Gửi Webhook POST tới Google Apps Script (`Code.gs`):

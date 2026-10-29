@@ -689,7 +689,10 @@ async function getAdDetailsFromTab(tabId, pageId) {
     }, 2);
     if (resp && resp.ok) {
       return {
-        postUrl: resp.postUrl || null,
+        postUrl: resp.fbPostUrl || resp.postUrl || null,
+        fbPostUrl: resp.fbPostUrl || null,
+        reelUrl: resp.reelUrl || null,
+        storyUrl: resp.storyUrl || null,
         websiteUrl: resp.websiteUrl || null,
         websiteUrlRaw: resp.websiteUrlRaw || null,
         rootDomain: resp.rootDomain || null,
@@ -876,8 +879,15 @@ async function processPage(pageIndex) {
       }, 2);
       if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
         state.pages[pageIndex].ads = adsRes.ads;
+        // Cập nhật postUrl cho Page nếu tìm được link Reel / Story thực tế từ creative
+        const bestFbPost = adsRes.ads.find(a => a.fbPostUrl && !a.fbPostUrl.includes('ads/library'));
+        if (bestFbPost && bestFbPost.fbPostUrl) {
+          state.pages[pageIndex].postUrl = bestFbPost.fbPostUrl;
+          state.pages[pageIndex].fbPostUrl = bestFbPost.fbPostUrl;
+        }
         await saveState({ pages: state.pages });
-        await addLog(`📦 Đã bóc tách thành công ${adsRes.ads.length} ads creative (Video/Image/CTA) cho [${page.pageName}]`, 'INFO');
+        const videoCount = adsRes.ads.filter(a => a.mediaFormat === 'VIDEO' || a.reelUrl).length;
+        await addLog(`📦 Đã bóc tách thành công ${adsRes.ads.length} ads creative (${videoCount} Video/Reel links, ${adsRes.ads.length - videoCount} Images/Carousels) cho [${page.pageName}]`, 'INFO');
       }
     } catch (adsErr) {
       console.debug('[Background] extractAllPageAds error:', adsErr.message);
@@ -1057,7 +1067,10 @@ async function getAdDetails(pageId, config) {
 
     if (resp && resp.ok) {
       return {
-        postUrl: resp.postUrl || null,
+        postUrl: resp.fbPostUrl || resp.postUrl || null,
+        fbPostUrl: resp.fbPostUrl || null,
+        reelUrl: resp.reelUrl || null,
+        storyUrl: resp.storyUrl || null,
         websiteUrl: resp.websiteUrl || null,
         websiteUrlRaw: resp.websiteUrlRaw || null,
         rootDomain: resp.rootDomain || null,
