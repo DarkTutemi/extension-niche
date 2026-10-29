@@ -725,23 +725,23 @@ async function getAdDetailsViaGraphQL(pageId, config = {}) {
  * Bóc tách toàn bộ Ads Creatives của một Page qua Meta GraphQL API
  * Thu thập: Ad ID, Link đích sản phẩm, Link thư viện, Nút CTA (Mua ngay...), Dạng bài (Video/Image/Carousel), Link Post/Reel Facebook
  */
-async function extractAllAdsViaGraphQL(pageId, limit = 50, config = {}) {
+async function extractAllAdsViaGraphQL(pageId, limit = 300, config = {}) {
   const country = config.country || 'ALL';
   const mediaType = (config.mediaType || 'ALL').toLowerCase();
   const publisherPlatform = config.publisherPlatform ? config.publisherPlatform.toLowerCase() : null;
   const platforms = (publisherPlatform && publisherPlatform !== 'all') ? [publisherPlatform.toUpperCase()] : [];
   const targetCountry = country === 'ALL' ? 'US' : country;
 
-  const variables = {
+  const buildAdVariables = (cursor = null) => ({
     activeStatus: 'active',
     adType: 'ALL',
     bylines: [],
     collationToken: null,
     contentLanguages: [],
     countries: targetCountry === 'ALL' ? ['US'] : [targetCountry],
-    cursor: null,
+    cursor: cursor,
     excludedIDs: null,
-    first: Math.min(50, limit),
+    first: 50,
     isTargetedCountry: false,
     location: null,
     mediaType: mediaType,
@@ -758,81 +758,106 @@ async function extractAllAdsViaGraphQL(pageId, limit = 50, config = {}) {
     startDate: config.startDateMin ? { min: config.startDateMin, max: null } : { max: null, min: null },
     v: 'e3d3df',
     viewAllPageID: String(pageId)
-  };
+  });
 
-  const json = await callMetaGraphQL(variables);
-  const edges = json.data?.ad_library_main?.search_results_connection?.edges || [];
   const ads = [];
   const seenAdIds = new Set();
 
-  for (const edge of edges) {
-    for (const item of (edge.node?.collated_results || [])) {
-      const adId = String(item.ad_archive_id || '');
-      if (!adId || seenAdIds.has(adId)) continue;
-      seenAdIds.add(adId);
+  function processAdEdges(edges) {
+    for (const edge of edges) {
+      for (const item of (edge.node?.collated_results || [])) {
+        const adId = String(item.ad_archive_id || '');
+        if (!adId || seenAdIds.has(adId)) continue;
+        seenAdIds.add(adId);
 
-      const snap = item.snapshot || {};
-      let rawCta = snap.link_url || snap.caption || '';
+        const snap = item.snapshot || {};
+        let rawCta = snap.link_url || snap.caption || '';
 
-      // Thu thập các link con nếu là Carousel cards
-      const cardUrls = [];
-      if (Array.isArray(snap.cards)) {
-        for (const card of snap.cards) {
-          const cardRaw = card.link_url || card.caption || '';
-          if (cardRaw) {
-            let cardClean = cardRaw;
-            if (typeof decodeCtaUrl === 'function') {
-              const dec = decodeCtaUrl(cardRaw);
-              if (dec && dec.websiteUrl) cardClean = dec.websiteUrl;
-            }
-            if (cardClean && !cardUrls.includes(cardClean)) {
-              cardUrls.push(cardClean);
+        // Thu thập các link con nếu là Carousel cards
+        const cardUrls = [];
+        if (Array.isArray(snap.cards)) {
+          for (const card of snap.cards) {
+            const cardRaw = card.link_url || card.caption || '';
+            if (cardRaw) {
+              let cardClean = cardRaw;
+              if (typeof decodeCtaUrl === 'function') {
+                const dec = decodeCtaUrl(cardRaw);
+                if (dec && dec.websiteUrl) cardClean = dec.websiteUrl;
+              }
+              if (cardClean && !cardUrls.includes(cardClean)) {
+                cardUrls.push(cardClean);
+              }
             }
           }
         }
+
+        // Nếu rawCta rỗng mà có cardUrls thì lấy link đầu tiên của card
+        if (!rawCta && cardUrls.length > 0) {
+          rawCta = cardUrls[0];
+        }
+
+        let cleanUrl = rawCta;
+        if (rawCta && typeof decodeCtaUrl === 'function') {
+          const dec = decodeCtaUrl(rawCta);
+          if (dec && dec.websiteUrl) cleanUrl = dec.websiteUrl;
+        }
+
+        // Xác định dạng bài (Media Format: VIDEO, IMAGE, CAROUSEL, TEXT)
+        let mediaFormat = 'IMAGE';
+        if (snap.videos && snap.videos.length > 0) {
+          mediaFormat = 'VIDEO';
+        } else if (snap.cards && snap.cards.length > 0) {
+          mediaFormat = 'CAROUSEL';
+        } else if (snap.images && snap.images.length > 0) {
+          mediaFormat = 'IMAGE';
+        } else {
+          mediaFormat = 'TEXT';
+        }
+
+        // Nút CTA và Loại CTA (Mua ngay - SHOP_NOW, Đăng ký - SIGN_UP...)
+        const ctaText = snap.cta_text || 'Mua ngay';
+        const ctaType = snap.cta_type || 'SHOP_NOW';
+
+        ads.push({
+          adId: adId,
+          adLibraryUrl: `https://www.facebook.com/ads/library/?id=${adId}`,
+          destinationUrl: cleanUrl,
+          cardUrls: cardUrls,
+          rawUrl: rawCta,
+          mediaFormat: mediaFormat,
+          ctaText: ctaText,
+          ctaType: ctaType,
+          title: snap.title || '',
+          body: snap.body?.text || '',
+          caption: snap.caption || '',
+          creationTime: snap.creation_time || null
+        });
       }
+    }
+  }
 
-      // Nếu rawCta rỗng mà có cardUrls thì lấy link đầu tiên của card
-      if (!rawCta && cardUrls.length > 0) {
-        rawCta = cardUrls[0];
-      }
+  // Đợt 1
+  let json = await callMetaGraphQL(buildAdVariables(null));
+  let conn = json.data?.ad_library_main?.search_results_connection;
+  let edges = conn?.edges || [];
+  let pageInfo = conn?.page_info;
+  processAdEdges(edges);
 
-      let cleanUrl = rawCta;
-      if (rawCta && typeof decodeCtaUrl === 'function') {
-        const dec = decodeCtaUrl(rawCta);
-        if (dec && dec.websiteUrl) cleanUrl = dec.websiteUrl;
-      }
-
-      // Xác định dạng bài (Media Format: VIDEO, IMAGE, CAROUSEL, TEXT)
-      let mediaFormat = 'IMAGE';
-      if (snap.videos && snap.videos.length > 0) {
-        mediaFormat = 'VIDEO';
-      } else if (snap.cards && snap.cards.length > 0) {
-        mediaFormat = 'CAROUSEL';
-      } else if (snap.images && snap.images.length > 0) {
-        mediaFormat = 'IMAGE';
-      } else {
-        mediaFormat = 'TEXT';
-      }
-
-      // Nút CTA và Loại CTA (Mua ngay - SHOP_NOW, Đăng ký - SIGN_UP...)
-      const ctaText = snap.cta_text || 'Mua ngay';
-      const ctaType = snap.cta_type || 'SHOP_NOW';
-
-      ads.push({
-        adId: adId,
-        adLibraryUrl: `https://www.facebook.com/ads/library/?id=${adId}`,
-        destinationUrl: cleanUrl,
-        cardUrls: cardUrls,
-        rawUrl: rawCta,
-        mediaFormat: mediaFormat,
-        ctaText: ctaText,
-        ctaType: ctaType,
-        title: snap.title || '',
-        body: snap.body?.text || '',
-        caption: snap.caption || '',
-        creationTime: snap.creation_time || null
-      });
+  // Phân trang tự động bằng cursor để cào TOÀN BỘ ads của Page (180 ads, 300 ads...)
+  let pageCount = 1;
+  const maxLoops = Math.min(25, Math.ceil(limit / 30));
+  while (pageInfo?.has_next_page && pageInfo?.end_cursor && pageCount < maxLoops && ads.length < limit) {
+    pageCount++;
+    try {
+      const nextJson = await callMetaGraphQL(buildAdVariables(pageInfo.end_cursor));
+      const nextConn = nextJson.data?.ad_library_main?.search_results_connection;
+      const nextEdges = nextConn?.edges || [];
+      pageInfo = nextConn?.page_info;
+      if (nextEdges.length === 0) break;
+      processAdEdges(nextEdges);
+    } catch (pageErr) {
+      console.debug('[ContentFB] extractAllAds pagination loop error:', pageErr.message);
+      break;
     }
   }
 

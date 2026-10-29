@@ -734,17 +734,18 @@ async function getAdDetailsFromTab(tabId, pageId, config = {}) {
  * @returns {string}
  */
 function formatInoteContent(pageName, pageId, activeCount, ratio, productUrls = [], timeStr) {
-  const uniqueUrls = Array.from(new Set(productUrls.filter(Boolean)));
   const dateStr = timeStr || new Date().toLocaleString('vi-VN');
+  const validUrls = productUrls.filter(Boolean);
+  const uniqueUrls = Array.from(new Set(validUrls));
   const headerLines = [
     `# Fanpage: ${pageName} (ID: ${pageId})`,
     `# Thời gian cào: ${dateStr}`,
     `# Tỷ lệ Active: ${(ratio * 100).toFixed(1)}% (Active: ${activeCount})`,
-    `# Danh sách link sản phẩm chạy quảng cáo (${uniqueUrls.length} links):`,
+    `# Tổng số link quảng cáo cào được: ${validUrls.length} links (${uniqueUrls.length} link sản phẩm độc nhất):`,
     '--------------------------------------------------',
     ''
   ];
-  return headerLines.concat(uniqueUrls).join('\n');
+  return headerLines.concat(validUrls).join('\n');
 }
 
 /**
@@ -768,8 +769,8 @@ async function uploadToInote(pageName, pageId, activeCount, ratio, productUrls =
       throw new Error('Không lấy được URL note mới từ inote.net');
     }
 
-    const uniqueUrls = Array.from(new Set(productUrls.filter(Boolean)));
-    const bodyText = formatInoteContent(pageName, pageId, activeCount, ratio, uniqueUrls);
+    const validUrls = productUrls.filter(Boolean);
+    const bodyText = formatInoteContent(pageName, pageId, activeCount, ratio, validUrls);
 
     const postRes = await fetch(noteUrl, {
       method: 'POST',
@@ -783,7 +784,7 @@ async function uploadToInote(pageName, pageId, activeCount, ratio, productUrls =
       throw new Error(`POST inote thất bại: HTTP ${postRes.status}`);
     }
 
-    return { ok: true, noteUrl, totalLinks: uniqueUrls.length };
+    return { ok: true, noteUrl, totalLinks: validUrls.length };
   } catch (err) {
     console.debug('[uploadToInote] error:', err.message);
     return { ok: false, error: err.message };
@@ -891,38 +892,42 @@ async function processPage(pageIndex) {
 
     // ── BƯỚC 2.5: Cào toàn bộ link chiến dịch & lưu vào iNote.net khi tỷ lệ Active >= 70% ──
     try {
-      await addLog(`📑 Đang cào toàn bộ link chiến dịch của [${page.pageName}] để lưu iNote...`, 'INFO');
+      const targetLimit = Math.max(300, ac || 0);
+      await addLog(`📑 Đang cào toàn bộ link chiến dịch của [${page.pageName}] (tối đa ${targetLimit} ads) để lưu iNote...`, 'INFO');
       const adsRes = await sendMessageToTab(pageTab.id, {
         type: 'GET_ALL_PAGE_ADS',
-        payload: { pageId: page.pageId, limit: 50, config: pageConfig }
+        payload: { pageId: page.pageId, limit: targetLimit, config: pageConfig }
       }, 2);
       if (adsRes && adsRes.ok && Array.isArray(adsRes.ads) && adsRes.ads.length > 0) {
         state.pages[pageIndex].ads = adsRes.ads;
         await saveState({ pages: state.pages });
 
-        // Trích xuất link sản phẩm đích (CTA URL), loại trừ link Facebook nội bộ
-        const productUrlSet = new Set();
+        // Trích xuất toàn bộ link chiến dịch từ tất cả bài ad
+        const allCampUrls = [];
         for (const ad of adsRes.ads) {
           if (ad.destinationUrl && !ad.destinationUrl.includes('facebook.com') && !ad.destinationUrl.includes('fb.com')) {
-            productUrlSet.add(ad.destinationUrl);
+            allCampUrls.push(ad.destinationUrl);
+          } else if (ad.rawUrl && !ad.rawUrl.includes('facebook.com') && !ad.rawUrl.includes('fb.com')) {
+            const dec = typeof decodeCtaUrl === 'function' ? decodeCtaUrl(ad.rawUrl) : null;
+            if (dec && dec.websiteUrl) allCampUrls.push(dec.websiteUrl);
           }
           if (Array.isArray(ad.cardUrls)) {
             for (const cUrl of ad.cardUrls) {
               if (cUrl && !cUrl.includes('facebook.com') && !cUrl.includes('fb.com')) {
-                productUrlSet.add(cUrl);
+                allCampUrls.push(cUrl);
               }
             }
           }
         }
-        const productUrls = Array.from(productUrlSet);
 
-        if (productUrls.length > 0) {
-          await addLog(`📝 Đang tạo trang iNote cho [${page.pageName}] (${productUrls.length} link sản phẩm đích)...`, 'INFO');
-          const inoteRes = await uploadToInote(page.pageName, page.pageId, ac, ratio, productUrls);
+        if (allCampUrls.length > 0) {
+          await addLog(`📝 Đang tạo trang iNote cho [${page.pageName}] (${allCampUrls.length} link chiến dịch)...`, 'INFO');
+          const inoteRes = await uploadToInote(page.pageName, page.pageId, ac, ratio, allCampUrls);
           if (inoteRes && inoteRes.ok) {
             state.pages[pageIndex].inoteUrl = inoteRes.noteUrl;
+            state.pages[pageIndex].linkPostAds = inoteRes.noteUrl;
             await saveState({ pages: state.pages });
-            await addLog(`📝 [${page.pageName}]: Đã cào ${productUrls.length} link sản phẩm đích vào iNote: ${inoteRes.noteUrl}`, 'SAVED');
+            await addLog(`📝 [${page.pageName}]: Đã gom ${allCampUrls.length} link camp vào iNote: ${inoteRes.noteUrl}`, 'SAVED');
           } else {
             await addLog(`⚠️ [${page.pageName}]: Lưu iNote thất bại: ${inoteRes?.error || 'Lỗi không xác định'}`, 'WARN');
           }
@@ -1514,6 +1519,7 @@ async function writeToSheet(pageIndex) {
       productCount: page.productCount,
       productSource: page.productSource || '',
       inoteUrl: page.inoteUrl || '',
+      linkPostAds: page.inoteUrl || page.linkPostAds || '',
       checkedAt: new Date().toLocaleString('vi-VN'),
       status: page.status || 'PASS',
       ads: page.ads || []

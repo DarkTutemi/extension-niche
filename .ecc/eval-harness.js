@@ -187,9 +187,9 @@ console.log(`\n${BOLD}5. Testing Google Sheet Schema & Streamlined Payload${RESE
 const codeGsContent = fs.readFileSync(path.join(rootDir, 'Code.gs'), 'utf8');
 
 assert(
-  "HEADERS in Code.gs does not contain 'Link Post Ads'",
+  "HEADERS in Code.gs contains 'Link Post Ads' at Column F",
   codeGsContent.includes("'Link Post Ads'"),
-  false
+  true
 );
 
 assert(
@@ -199,8 +199,8 @@ assert(
 );
 
 assert(
-  "Active Ratio format is applied to Column 9 (Column I) in Code.gs",
-  codeGsContent.includes("sheet.getRange(existingRowIndex, 9).setNumberFormat('0.0%')"),
+  "Active Ratio format is applied to Column 10 (Column J) in Code.gs",
+  codeGsContent.includes("sheet.getRange(existingRowIndex, 10).setNumberFormat('0.0%')"),
   true
 );
 
@@ -212,6 +212,7 @@ function buildMockRowValues(data) {
     data.keyword || '',
     "'" + String(data.pageId),
     data.pageName || '',
+    data.inoteUrl || '', // Cột F: Link Post Ads chứa iNote
     data.websiteUrl || '',
     data.activeCount || 0,
     data.inactiveCount || 0,
@@ -228,6 +229,7 @@ const mockData = {
   keyword: 'serum',
   pageId: '1875448039341460',
   pageName: 'Timeless Skin Care',
+  inoteUrl: 'https://inote.net/XYZ123',
   websiteUrl: 'https://www.timelessha.com',
   activeCount: 21,
   inactiveCount: 0,
@@ -238,9 +240,10 @@ const mockData = {
 };
 
 const mockRow = buildMockRowValues(mockData);
-assert("Row values has exact 13 columns (STT to Trạng thái)", mockRow.length, 13);
-assert("Column 6 (index 5) is Link Website", mockRow[5], 'https://www.timelessha.com');
-assert("Column 9 (index 8) is Active Ratio", mockRow[8], 1.0);
+assert("Row values has exact 14 columns (STT to Trạng thái)", mockRow.length, 14);
+assert("Column 6 (index 5) is Link Post Ads (iNote URL)", mockRow[5], 'https://inote.net/XYZ123');
+assert("Column 7 (index 6) is Link Website", mockRow[6], 'https://www.timelessha.com');
+assert("Column 10 (index 9) is Active Ratio", mockRow[9], 1.0);
 
 // ----------------------------------------------------
 // Test Suite 6: Silent Failure Hunter Audit
@@ -365,7 +368,8 @@ const inoteBody = formatInoteContent(
 assert("Inote content includes Page Name", inoteBody.includes('# Fanpage: Timeless Skin Care'), true);
 assert("Inote content includes Page ID", inoteBody.includes('ID: 1875448039341460'), true);
 assert("Inote content includes Active Ratio", inoteBody.includes('100.0%'), true);
-assert("Inote content header states exact unique link count (2 links)", inoteBody.includes('2 links'), true);
+assert("Inote content header states exact total link count (3 links)", inoteBody.includes('3 links'), true);
+assert("Inote content header states unique product count (2 link sản phẩm độc nhất)", inoteBody.includes('2 link sản phẩm độc nhất'), true);
 assert("Inote content includes first unique product URL", inoteBody.includes('https://www.timelessha.com/products/20-vitamin-c-e-ferulic-acid-serum-1-oz'), true);
 assert("Inote content includes second unique product URL", inoteBody.includes('https://www.timelessha.com/products/hyaluronic-acid-serum-100-pure'), true);
 

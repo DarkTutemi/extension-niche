@@ -33,6 +33,7 @@ const HEADERS = [
   'Keyword',
   'Page ID',
   'Tên Page',
+  'Link Post Ads',
   'Link Website',
   'Active Ads',
   'Inactive Ads',
@@ -302,20 +303,22 @@ function doPost(e) {
     const productVal = data.productCount != null ? data.productCount : (data.productsCount != null ? data.productsCount : 0);
     const sourceVal = data.productSource || (data.isShopify ? 'Shopify JSON' : 'Sitemap') || 'N/A';
 
+    const inoteLink = data.inoteUrl || data.linkPostAds || '';
     const rowValues = [
-      stt,                                     // STT
-      data.niche || 'N/A',                     // Ngách
-      data.keyword || '',                      // Keyword
-      "'" + String(data.pageId),               // Page ID (dạng text chống mất số 0)
-      data.pageName || '',                     // Tên Page
-      data.websiteUrl || '',                   // Link Website
-      activeVal,                               // Active Ads
-      inactiveVal,                             // Inactive Ads
-      ratioValue,                              // Active Ratio (số thập phân)
-      productVal,                              // Số sản phẩm
-      sourceVal,                               // Nguồn đếm SP
-      data.checkedAt || new Date().toLocaleString('vi-VN'), // Ngày kiểm tra
-      data.status || 'PASS'                    // Trạng thái
+      stt,                                     // 1. STT
+      data.niche || 'N/A',                     // 2. Ngách
+      data.keyword || '',                      // 3. Keyword
+      "'" + String(data.pageId),               // 4. Page ID (dạng text chống mất số 0)
+      data.pageName || '',                     // 5. Tên Page
+      inoteLink,                               // 6. Link Post Ads (Lưu link iNote gom tất cả camp ads)
+      data.websiteUrl || '',                   // 7. Link Website
+      activeVal,                               // 8. Active Ads
+      inactiveVal,                             // 9. Inactive Ads
+      ratioValue,                              // 10. Active Ratio (số thập phân)
+      productVal,                              // 11. Số sản phẩm
+      sourceVal,                               // 12. Nguồn đếm SP
+      data.checkedAt || new Date().toLocaleString('vi-VN'), // 13. Ngày kiểm tra
+      data.status || 'PASS'                    // 14. Trạng thái
     ];
 
     let actionTaken = 'INSERTED';
@@ -331,8 +334,8 @@ function doPost(e) {
     }
 
     // 8. Định dạng số hiển thị cho dòng vừa ghi
-    // Cột I (cột 9) = Active Ratio định dạng %
-    sheet.getRange(existingRowIndex, 9).setNumberFormat('0.0%');
+    // Cột J (cột 10) = Active Ratio định dạng %
+    sheet.getRange(existingRowIndex, 10).setNumberFormat('0.0%');
 
     // 9. Xử lý ghi chi tiết toàn bộ Ads Creatives vào tab FB_Ads_Creatives (chuẩn AppSheet)
     let creativesCount = 0;
